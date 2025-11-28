@@ -1,0 +1,20 @@
+name = "silly-chess"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+
+[env.production]
+routes = [
+  { pattern = "chess.emilycogsdill.com/*", zone_name = "emilycogsdill.com" }
+]
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "silly-chess-db"
+database_id = "ffad9c57-6375-4161-b5fc-fccf2e534dbd"
+
+[dev]
+port = 8787
