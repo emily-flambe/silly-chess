@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chess Board Example - Silly Chess</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div id="board-container"></div>
+
+  <div style="text-align: center; margin-top: 20px;">
+    <button id="flip-btn" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
+      Flip Board
+    </button>
+    <button id="reset-btn" style="padding: 10px 20px; font-size: 16px; cursor: pointer; margin-left: 10px;">
+      Reset Position
+    </button>
+  </div>
+
+  <div id="status" style="text-align: center; margin-top: 20px; font-size: 18px;"></div>
+
+  <script type="module">
+    // This is a usage example - actual integration will use the compiled TypeScript
+    import { ChessBoard } from './Board.ts';
+    import { ChessEngine } from '../../lib/chess-engine/index.ts';
+
+    // Create chess engine
+    const engine = new ChessEngine();
+
+    // Create board
+    const container = document.getElementById('board-container');
+    const board = new ChessBoard(container, {
+      flipped: false,
+      interactive: true,
+      showCoordinates: true
+    });
+
+    // Set the engine
+    board.setEngine(engine);
+
+    // Handle moves
+    board.onMove((from, to) => {
+      console.log(`Move: ${from} -> ${to}`);
+
+      // Make the move
+      const success = engine.move(from, to);
+
+      if (success) {
+        // Update the board display
+        board.setEngine(engine);
+
+        // Update status
+        const status = engine.getStatus();
+        let statusText = `Turn: ${status.turn}`;
+
+        if (status.isCheckmate) {
+          statusText = `Checkmate! ${status.turn === 'white' ? 'Black' : 'White'} wins!`;
+        } else if (status.isStalemate) {
+          statusText = 'Stalemate! Draw.';
+        } else if (status.isDraw) {
+          statusText = 'Draw!';
+        } else if (status.isCheck) {
+          statusText += ' - Check!';
+        }
+
+        document.getElementById('status').textContent = statusText;
+      } else {
+        console.error('Illegal move');
+      }
+    });
+
+    // Flip button
+    document.getElementById('flip-btn').addEventListener('click', () => {
+      board.flip();
+    });
+
+    // Reset button
+    document.getElementById('reset-btn').addEventListener('click', () => {
+      engine.reset();
+      board.setEngine(engine);
+      document.getElementById('status').textContent = 'Turn: white';
+    });
+
+    // Initial status
+    document.getElementById('status').textContent = 'Turn: white';
+  </script>
+</body>
+</html>

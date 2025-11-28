@@ -1,0 +1,283 @@
+/**
+ * Silly Chess - Frontend Styles
+ *
+ * Chess board and piece styles
+ */
+
+/* Reset and base styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: #312e2b;
+  color: #fff;
+  padding: 20px;
+}
+
+/* Chess Board Container */
+.chess-board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  width: min(80vw, 80vh, 600px);
+  height: min(80vw, 80vh, 600px);
+  margin: 0 auto;
+  border: 3px solid #272522;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  position: relative;
+  user-select: none;
+}
+
+/* Board with coordinates */
+.chess-board.with-coords {
+  grid-template-columns: repeat(8, 1fr) 30px;
+  grid-template-rows: repeat(8, 1fr) 30px;
+}
+
+/* Square Styles */
+.square {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.square.light {
+  background-color: #f0d9b5;
+}
+
+.square.dark {
+  background-color: #b58863;
+}
+
+/* Piece Styles */
+.piece {
+  font-size: min(10vw, 10vh, 60px);
+  pointer-events: none;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.1s ease;
+}
+
+/* Interactive States */
+.square:hover {
+  filter: brightness(1.1);
+}
+
+.square.selected {
+  background-color: #829769 !important;
+}
+
+/* Legal Move Indicators */
+.square.legal-move::after {
+  content: '';
+  position: absolute;
+  width: 25%;
+  height: 25%;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+}
+
+.square.legal-capture::after {
+  content: '';
+  position: absolute;
+  width: 85%;
+  height: 85%;
+  border-radius: 50%;
+  border: 4px solid rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+}
+
+/* Last Move Highlight */
+.square.last-move {
+  background-color: #ced26b !important;
+}
+
+/* Check Highlight */
+.square.in-check {
+  background-color: #e74c3c !important;
+  animation: check-pulse 1s ease-in-out infinite;
+}
+
+@keyframes check-pulse {
+  0%, 100% {
+    box-shadow: inset 0 0 0 2px rgba(231, 76, 60, 0.5);
+  }
+  50% {
+    box-shadow: inset 0 0 0 4px rgba(231, 76, 60, 0.8);
+  }
+}
+
+/* Coordinate Labels */
+.coordinate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #a0a0a0;
+  pointer-events: none;
+}
+
+.file-coord {
+  align-items: flex-start;
+  padding-top: 5px;
+}
+
+.rank-coord {
+  justify-content: flex-start;
+  padding-left: 5px;
+}
+
+/* Flipped Board */
+.chess-board.flipped {
+  transform: rotate(180deg);
+}
+
+.chess-board.flipped .square {
+  transform: rotate(180deg);
+}
+
+.chess-board.flipped .coordinate {
+  transform: rotate(180deg);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .chess-board {
+    width: 95vw;
+    height: 95vw;
+    max-width: 500px;
+    max-height: 500px;
+  }
+
+  .piece {
+    font-size: 12vw;
+  }
+
+  .coordinate {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chess-board {
+    border-width: 2px;
+  }
+
+  .piece {
+    font-size: 14vw;
+  }
+
+  .coordinate {
+    font-size: 10px;
+  }
+
+  .square.legal-move::after {
+    width: 30%;
+    height: 30%;
+  }
+
+  .square.legal-capture::after {
+    border-width: 3px;
+  }
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .square:hover {
+    filter: none;
+  }
+
+  .square:active {
+    filter: brightness(1.1);
+  }
+
+  /* Prevent text selection on touch */
+  .chess-board {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+}
+
+/* Loading State */
+.chess-board.loading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Disabled State */
+.chess-board.disabled {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* Accessibility */
+.square:focus-visible {
+  outline: 3px solid #4a90e2;
+  outline-offset: -3px;
+  z-index: 10;
+}
+
+.piece:focus-visible {
+  outline: 2px solid #4a90e2;
+  outline-offset: 2px;
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+  .square.light {
+    background-color: #ffffff;
+  }
+
+  .square.dark {
+    background-color: #666666;
+  }
+
+  .square.selected {
+    background-color: #00aa00 !important;
+  }
+
+  .square.in-check {
+    background-color: #ff0000 !important;
+  }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  .square {
+    transition: none;
+  }
+
+  .piece {
+    transition: none;
+  }
+
+  .square.in-check {
+    animation: none;
+    box-shadow: inset 0 0 0 4px rgba(231, 76, 60, 0.8);
+  }
+}
+
+/* Print Styles */
+@media print {
+  body {
+    background-color: white;
+    color: black;
+  }
+
+  .chess-board {
+    border-color: black;
+    box-shadow: none;
+  }
+
+  .coordinate {
+    color: black;
+  }
+}

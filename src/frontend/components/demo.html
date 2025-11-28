@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Controls Demo - Silly Chess</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      padding: 40px;
+    }
+
+    .demo-container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .demo-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .demo-title {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .demo-subtitle {
+      font-size: 14px;
+      color: #888;
+    }
+
+    .demo-section {
+      margin-bottom: 32px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #829769;
+    }
+
+    .event-log {
+      background: #16213e;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      padding: 4px 0;
+      border-bottom: 1px solid #222;
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+
+    .log-time {
+      color: #888;
+      margin-right: 8px;
+    }
+
+    .log-event {
+      color: #829769;
+      margin-right: 8px;
+    }
+
+    .state-display {
+      background: #16213e;
+      padding: 16px;
+      border-radius: 8px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .state-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .state-label {
+      font-size: 14px;
+      color: #888;
+    }
+
+    .state-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #829769;
+    }
+
+    .demo-controls {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .demo-btn {
+      flex: 1;
+      padding: 10px 16px;
+      background: #4a4e69;
+      color: #eee;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .demo-btn:hover {
+      background: #5c6078;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <div class="demo-header">
+      <h1 class="demo-title">Game Controls Demo</h1>
+      <p class="demo-subtitle">Interactive component demonstration</p>
+    </div>
+
+    <div class="demo-section">
+      <h2 class="section-title">Controls</h2>
+      <div id="game-controls"></div>
+    </div>
+
+    <div class="demo-section">
+      <h2 class="section-title">State</h2>
+      <div class="state-display" id="state-display">
+        <div class="state-item">
+          <span class="state-label">Game Active:</span>
+          <span class="state-value" id="state-active">false</span>
+        </div>
+        <div class="state-item">
+          <span class="state-label">Can Undo:</span>
+          <span class="state-value" id="state-undo">false</span>
+        </div>
+        <div class="state-item">
+          <span class="state-label">Current Elo:</span>
+          <span class="state-value" id="state-elo">1500</span>
+        </div>
+        <div class="state-item">
+          <span class="state-label">Show Coords:</span>
+          <span class="state-value" id="state-coords">true</span>
+        </div>
+      </div>
+
+      <div class="demo-controls">
+        <button class="demo-btn" id="toggle-active">Toggle Active</button>
+        <button class="demo-btn" id="toggle-undo">Toggle Undo</button>
+        <button class="demo-btn" id="clear-log">Clear Log</button>
+      </div>
+    </div>
+
+    <div class="demo-section">
+      <h2 class="section-title">Event Log</h2>
+      <div class="event-log" id="event-log"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { GameControls } from './GameControls.js';
+
+    // Initialize controls
+    const controlsContainer = document.getElementById('game-controls');
+    const controls = new GameControls(controlsContainer);
+
+    // State tracking
+    let gameActive = false;
+    let canUndo = false;
+
+    // Event log
+    const eventLog = document.getElementById('event-log');
+    function logEvent(event, data) {
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `
+        <span class="log-time">[${time}]</span>
+        <span class="log-event">${event}</span>
+        <span class="log-data">${JSON.stringify(data)}</span>
+      `;
+      eventLog.insertBefore(entry, eventLog.firstChild);
+    }
+
+    // Update state display
+    function updateStateDisplay() {
+      document.getElementById('state-active').textContent = gameActive;
+      document.getElementById('state-undo').textContent = canUndo;
+
+      const slider = controls.getDifficultySlider();
+      if (slider) {
+        document.getElementById('state-elo').textContent = slider.getElo();
+      }
+
+      const prefs = controls.getPreferences();
+      document.getElementById('state-coords').textContent = prefs.showCoordinates;
+    }
+
+    // Register callbacks
+    controls.onNewGame((color) => {
+      logEvent('NEW_GAME', { color });
+      gameActive = true;
+      canUndo = false;
+      controls.setGameActive(gameActive);
+      controls.setCanUndo(canUndo);
+      updateStateDisplay();
+    });
+
+    controls.onResign(() => {
+      logEvent('RESIGN', {});
+      gameActive = false;
+      canUndo = false;
+      controls.setGameActive(gameActive);
+      controls.setCanUndo(canUndo);
+      updateStateDisplay();
+    });
+
+    controls.onUndo(() => {
+      logEvent('UNDO', {});
+      updateStateDisplay();
+    });
+
+    // Difficulty slider callback
+    const difficultySlider = controls.getDifficultySlider();
+    if (difficultySlider) {
+      difficultySlider.onChange((elo) => {
+        logEvent('ELO_CHANGED', { elo });
+        updateStateDisplay();
+      });
+    }
+
+    // Demo controls
+    document.getElementById('toggle-active').addEventListener('click', () => {
+      gameActive = !gameActive;
+      controls.setGameActive(gameActive);
+      updateStateDisplay();
+      logEvent('TOGGLE_ACTIVE', { active: gameActive });
+    });
+
+    document.getElementById('toggle-undo').addEventListener('click', () => {
+      canUndo = !canUndo;
+      controls.setCanUndo(canUndo);
+      updateStateDisplay();
+      logEvent('TOGGLE_UNDO', { canUndo });
+    });
+
+    document.getElementById('clear-log').addEventListener('click', () => {
+      eventLog.innerHTML = '';
+    });
+
+    // Initial state
+    updateStateDisplay();
+    logEvent('INITIALIZED', { elo: difficultySlider?.getElo() });
+  </script>
+</body>
+</html>
