@@ -2,7 +2,7 @@ name = "silly-chess"
 main = "src/index.ts"
 compatibility_date = "2025-01-15"
 
-[env.production]
+# Custom domain routing
 routes = [
   { pattern = "chess.emilycogsdill.com/*", zone_name = "emilycogsdill.com" }
 ]
