@@ -16,14 +16,12 @@ export class GameControls {
   private gameActive: boolean = false;
   private canUndo: boolean = false;
   private showCoordinates: boolean = true;
-  private soundEnabled: boolean = true;
 
   private newGameCallbacks: Array<(color: PlayerColor) => void> = [];
   private resignCallbacks: Array<() => void> = [];
   private undoCallbacks: Array<() => void> = [];
 
   private readonly STORAGE_KEY_COORDS = 'silly-chess-show-coords';
-  private readonly STORAGE_KEY_SOUND = 'silly-chess-sound';
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -153,13 +151,6 @@ export class GameControls {
 
           <div class="setting-item">
             <label class="setting-label">
-              <input type="checkbox" class="setting-checkbox sound-toggle" ${this.soundEnabled ? 'checked' : ''}>
-              <span>Sound Effects</span>
-            </label>
-          </div>
-
-          <div class="setting-item">
-            <label class="setting-label">
               <input type="checkbox" class="setting-checkbox coords-toggle" ${this.showCoordinates ? 'checked' : ''}>
               <span>Show Coordinates</span>
             </label>
@@ -179,16 +170,10 @@ export class GameControls {
     // Add settings event listeners
     const overlay = this.settingsPanel.querySelector('.settings-overlay');
     const closeBtn = this.settingsPanel.querySelector('.settings-close');
-    const soundToggle = this.settingsPanel.querySelector('.sound-toggle');
     const coordsToggle = this.settingsPanel.querySelector('.coords-toggle');
 
     overlay?.addEventListener('click', () => this.hideSettings());
     closeBtn?.addEventListener('click', () => this.hideSettings());
-
-    soundToggle?.addEventListener('change', (e) => {
-      this.soundEnabled = (e.target as HTMLInputElement).checked;
-      this.savePreferences();
-    });
 
     coordsToggle?.addEventListener('change', (e) => {
       this.showCoordinates = (e.target as HTMLInputElement).checked;
@@ -549,14 +534,9 @@ export class GameControls {
    */
   private loadPreferences(): void {
     const coords = localStorage.getItem(this.STORAGE_KEY_COORDS);
-    const sound = localStorage.getItem(this.STORAGE_KEY_SOUND);
 
     if (coords !== null) {
       this.showCoordinates = coords === 'true';
-    }
-
-    if (sound !== null) {
-      this.soundEnabled = sound === 'true';
     }
   }
 
@@ -565,7 +545,6 @@ export class GameControls {
    */
   private savePreferences(): void {
     localStorage.setItem(this.STORAGE_KEY_COORDS, this.showCoordinates.toString());
-    localStorage.setItem(this.STORAGE_KEY_SOUND, this.soundEnabled.toString());
   }
 
   /**
@@ -621,10 +600,9 @@ export class GameControls {
   /**
    * Get current preferences
    */
-  public getPreferences(): { showCoordinates: boolean; soundEnabled: boolean } {
+  public getPreferences(): { showCoordinates: boolean } {
     return {
       showCoordinates: this.showCoordinates,
-      soundEnabled: this.soundEnabled,
     };
   }
 }
