@@ -16,19 +16,14 @@ export interface BoardOptions {
 
 type MoveCallback = (from: string, to: string) => void;
 
+// Use the same filled symbols for both colors - we'll style with CSS
 const PIECE_SYMBOLS: Record<string, string> = {
-  'wK': '\u2654', // White King
-  'wQ': '\u2655', // White Queen
-  'wR': '\u2656', // White Rook
-  'wB': '\u2657', // White Bishop
-  'wN': '\u2658', // White Knight
-  'wP': '\u2659', // White Pawn
-  'bK': '\u265A', // Black King
-  'bQ': '\u265B', // Black Queen
-  'bR': '\u265C', // Black Rook
-  'bB': '\u265D', // Black Bishop
-  'bN': '\u265E', // Black Knight
-  'bP': '\u265F', // Black Pawn
+  'K': '\u265A', // King (filled)
+  'Q': '\u265B', // Queen (filled)
+  'R': '\u265C', // Rook (filled)
+  'B': '\u265D', // Bishop (filled)
+  'N': '\u265E', // Knight (filled)
+  'P': '\u265F', // Pawn (filled)
 };
 
 export class ChessBoard {
@@ -50,6 +45,8 @@ export class ChessBoard {
       showCoordinates: options.showCoordinates ?? true
     };
 
+    // Clear container before adding board
+    this.container.innerHTML = '';
     this.boardElement = this.createBoardElement();
     this.container.appendChild(this.boardElement);
     this.render();
@@ -94,14 +91,12 @@ export class ChessBoard {
     square.dataset.file = String(file);
     square.dataset.rank = String(rank);
 
-    // Add event listeners if interactive
-    if (this.options.interactive) {
-      square.addEventListener('click', () => this.handleSquareClick(squareName));
-      square.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        this.handleSquareClick(squareName);
-      });
-    }
+    // Always add event listeners - interactivity is checked in the handler
+    square.addEventListener('click', () => this.handleSquareClick(squareName));
+    square.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      this.handleSquareClick(squareName);
+    });
 
     return square;
   }
@@ -272,9 +267,8 @@ export class ChessBoard {
       const squareElement = this.getSquareElement(square);
       if (squareElement) {
         const pieceElement = document.createElement('div');
-        pieceElement.className = 'piece';
-        const colorPrefix = pieceInfo.color === 'white' ? 'w' : 'b';
-        const pieceKey = colorPrefix + pieceInfo.piece.toUpperCase();
+        pieceElement.className = `piece piece-${pieceInfo.color}`;
+        const pieceKey = pieceInfo.piece.toUpperCase();
         pieceElement.textContent = PIECE_SYMBOLS[pieceKey] || pieceInfo.piece;
         squareElement.appendChild(pieceElement);
       }
@@ -400,6 +394,13 @@ export class ChessBoard {
     if (!enabled) {
       this.deselectSquare();
     }
+  }
+
+  /**
+   * Update the board display (re-render from engine state)
+   */
+  update(): void {
+    this.render();
   }
 
   /**

@@ -4,7 +4,7 @@
  */
 
 import { ChessEngine } from '../lib/chess-engine';
-import { StockfishWorker } from '../lib/stockfish';
+import { ChessApiClient } from '../lib/stockfish';
 import { ChessBoard } from './components/Board';
 import { GameControls } from './components/GameControls';
 import { EvalBar } from './components/EvalBar';
@@ -20,7 +20,7 @@ export class SillyChessApp {
   private board!: ChessBoard;
   private controls!: GameControls;
   private evalBar!: EvalBar;
-  private stockfish!: StockfishWorker;
+  private stockfish!: ChessApiClient;
   private engine!: ChessEngine;
 
   private state: GameState = {
@@ -70,7 +70,7 @@ export class SillyChessApp {
 
     // Create UI components
     this.board = new ChessBoard(this.containers.board, {
-      interactive: false, // Start non-interactive until game starts
+      interactive: true,
       showCoordinates: true,
     });
     this.board.setEngine(this.engine);
@@ -81,10 +81,10 @@ export class SillyChessApp {
     // Set up event handlers
     this.setupEventHandlers();
 
-    // Initialize Stockfish
-    this.setStatus('Loading Stockfish engine...');
+    // Initialize Chess API client
+    this.setStatus('Connecting to chess engine...');
     try {
-      this.stockfish = new StockfishWorker();
+      this.stockfish = new ChessApiClient();
       await this.stockfish.initialize();
 
       // Set initial Elo from controls
@@ -96,7 +96,7 @@ export class SillyChessApp {
       this.setStatus('Ready - Click "New Game" to start');
     } catch (error) {
       console.error('Failed to initialize Stockfish:', error);
-      this.setStatus('Stockfish failed to load - AI opponent unavailable');
+      this.setStatus('Chess engine unavailable - AI opponent disabled');
     }
   }
 
@@ -201,7 +201,7 @@ export class SillyChessApp {
   }
 
   /**
-   * Make AI move using Stockfish
+   * Make AI move using Chess API
    */
   private async makeAIMove(): Promise<void> {
     if (!this.state.isGameActive || !this.stockfish?.isReady()) {
@@ -210,17 +210,12 @@ export class SillyChessApp {
 
     this.state.isThinking = true;
     this.board.setInteractive(false);
-    this.setStatus('Stockfish is thinking...');
+    this.setStatus('AI is thinking...');
 
     try {
       const fen = this.engine.getFEN();
-      const slider = this.controls.getDifficultySlider();
-      const elo = slider?.getElo() || 1500;
 
-      // Calculate think time based on Elo (lower Elo = faster, more "human" feel)
-      const thinkTime = Math.max(500, Math.min(3000, (elo - 800) * 1.5 + 500));
-
-      const bestMove = await this.stockfish.getBestMove(fen, { movetime: thinkTime });
+      const bestMove = await this.stockfish.getBestMove(fen);
 
       if (bestMove && this.state.isGameActive) {
         // Parse UCI move format (e.g., "e2e4" or "e7e8q" for promotion)
@@ -229,6 +224,7 @@ export class SillyChessApp {
         const promotion = bestMove.length > 4 ? bestMove[4] : undefined;
 
         this.engine.move(from, to, promotion);
+        this.board.update(); // Re-render board with AI's move
         this.controls.setCanUndo(true);
 
         // Check game end conditions

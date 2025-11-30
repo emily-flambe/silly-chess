@@ -32,11 +32,27 @@ export class StockfishWorker {
       return;
     }
 
+    // Fetch stockfish.js and create a blob URL to avoid CORS issues
+    const stockfishUrl = 'https://cdn.jsdelivr.net/npm/stockfish@16.1.0/src/stockfish-nnue-16-single.js';
+
+    let stockfishCode: string;
+    try {
+      const response = await fetch(stockfishUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch Stockfish: ${response.status}`);
+      }
+      stockfishCode = await response.text();
+    } catch (fetchError) {
+      throw new Error(`Could not load Stockfish engine: ${fetchError}`);
+    }
+
+    const blob = new Blob([stockfishCode], { type: 'application/javascript' });
+    const blobUrl = URL.createObjectURL(blob);
+
     return new Promise((resolve, reject) => {
       try {
-        // Load Stockfish from CDN (stockfish.js Web Worker version)
-        // For production, consider self-hosting the WASM files
-        this.worker = new Worker('https://unpkg.com/stockfish.js@10.0.2/stockfish.js');
+        this.worker = new Worker(blobUrl);
+        URL.revokeObjectURL(blobUrl); // Clean up blob URL
 
         let uciOk = false;
         let readyOk = false;
