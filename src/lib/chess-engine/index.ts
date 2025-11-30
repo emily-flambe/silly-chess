@@ -1,11 +1,13 @@
 /**
  * Chess Engine - Main exports
  *
- * Wraps chess.js with extensible interfaces for future variant support
+ * Wraps chess.js with extensible interfaces for future variant support.
+ * Also exports VariantBoard for ffish-based variant support.
  */
 
 // Core classes
 import { Board } from './Board';
+import { VariantBoard, initializeFfish, getAvailableVariants } from './VariantBoard';
 import {
   Piece,
   King,
@@ -30,6 +32,7 @@ import {
 
 // Re-export everything
 export { Board };
+export { VariantBoard, initializeFfish, getAvailableVariants };
 export {
   Piece,
   King,

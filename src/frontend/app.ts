@@ -4,7 +4,7 @@
  */
 
 import { ChessEngine } from '../lib/chess-engine';
-import { ChessApiClient } from '../lib/stockfish';
+import { FairyStockfishClient } from '../lib/stockfish';
 import { ChessBoard } from './components/Board';
 import { GameControls } from './components/GameControls';
 import { EvalBar } from './components/EvalBar';
@@ -20,7 +20,7 @@ export class SillyChessApp {
   private board!: ChessBoard;
   private controls!: GameControls;
   private evalBar!: EvalBar;
-  private stockfish!: ChessApiClient;
+  private stockfish!: FairyStockfishClient;
   private engine!: ChessEngine;
 
   private state: GameState = {
@@ -81,10 +81,10 @@ export class SillyChessApp {
     // Set up event handlers
     this.setupEventHandlers();
 
-    // Initialize Chess API client
-    this.setStatus('Connecting to chess engine...');
+    // Initialize Fairy-Stockfish WASM client
+    this.setStatus('Loading chess engine...');
     try {
-      this.stockfish = new ChessApiClient();
+      this.stockfish = new FairyStockfishClient();
       await this.stockfish.initialize();
 
       // Set initial Elo from controls
