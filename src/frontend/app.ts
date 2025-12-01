@@ -8,6 +8,7 @@ import { FairyStockfishClient } from '../lib/stockfish';
 import { ChessBoard } from './components/Board';
 import { GameControls } from './components/GameControls';
 import { EvalBar } from './components/EvalBar';
+import { MoveList } from './components/MoveList';
 
 export interface GameState {
   engine: ChessEngine;
@@ -20,6 +21,7 @@ export class SillyChessApp {
   private board!: ChessBoard;
   private controls!: GameControls;
   private evalBar!: EvalBar;
+  private moveList!: MoveList;
   private stockfish!: FairyStockfishClient;
   private engine!: ChessEngine;
 
@@ -36,6 +38,7 @@ export class SillyChessApp {
     evalBar: HTMLElement;
     status: HTMLElement;
     difficultyDisplay: HTMLElement;
+    moveList: HTMLElement;
   };
 
   constructor() {
@@ -45,8 +48,9 @@ export class SillyChessApp {
     const evalBarContainer = document.getElementById('eval-bar-container');
     const statusContainer = document.getElementById('status-container');
     const difficultyDisplay = document.getElementById('difficulty-display');
+    const moveListContainer = document.getElementById('move-list-container');
 
-    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay) {
+    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer) {
       throw new Error('Required container elements not found');
     }
 
@@ -56,6 +60,7 @@ export class SillyChessApp {
       evalBar: evalBarContainer,
       status: statusContainer,
       difficultyDisplay: difficultyDisplay,
+      moveList: moveListContainer,
     };
 
     this.initialize();
@@ -80,6 +85,7 @@ export class SillyChessApp {
 
     this.controls = new GameControls(this.containers.controls);
     this.evalBar = new EvalBar(this.containers.evalBar);
+    this.moveList = new MoveList(this.containers.moveList);
 
     // Set up event handlers
     this.setupEventHandlers();
@@ -171,6 +177,7 @@ export class SillyChessApp {
     // Reset engine and clear board highlights
     this.engine.reset();
     this.board.clearLastMove();
+    this.moveList.clear();
 
     // Update state
     this.state.playerColor = playerColor;
@@ -219,6 +226,9 @@ export class SillyChessApp {
       return; // Invalid move
     }
 
+    // Update move list
+    this.moveList.update(this.engine.getState().moveHistory);
+
     // Update can undo state
     this.controls.setCanUndo(true);
 
@@ -257,6 +267,7 @@ export class SillyChessApp {
 
         this.engine.move(from, to, promotion);
         this.board.update(); // Re-render board with AI's move
+        this.moveList.update(this.engine.getState().moveHistory);
         this.controls.setCanUndo(true);
 
         // Check game end conditions
@@ -357,6 +368,7 @@ export class SillyChessApp {
     // Reset board to starting position and clear highlights
     this.engine.reset();
     this.board.clearLastMove();
+    this.moveList.clear();
     this.evalBar.reset();
   }
 
@@ -372,6 +384,9 @@ export class SillyChessApp {
     this.engine.undo();
     // Undo player's move
     this.engine.undo();
+
+    // Update move list
+    this.moveList.update(this.engine.getState().moveHistory);
 
     // Check if more moves can be undone
     const history = this.engine.getState().moveHistory;

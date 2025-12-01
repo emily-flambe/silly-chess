@@ -67,6 +67,13 @@
       gap: 0.5rem;
     }
 
+    /* Move list panel */
+    .move-list-panel {
+      width: 180px;
+      height: min(80vw, 560px);
+      max-height: 560px;
+    }
+
     .board-wrapper {
       display: flex;
       flex-direction: column;
@@ -140,6 +147,12 @@
     }
 
     /* Responsive adjustments */
+    @media (max-width: 1100px) {
+      .move-list-panel {
+        display: none;
+      }
+    }
+
     @media (max-width: 900px) {
       .main {
         padding: 1rem;
@@ -228,6 +241,7 @@
             <div class="loading">Loading</div>
           </div>
         </div>
+        <div id="move-list-container" class="move-list-panel"></div>
       </div>
 
       <div class="controls-panel">
