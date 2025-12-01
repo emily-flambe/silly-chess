@@ -1,5 +1,25 @@
 # Silly Chess
 
+## Getting Up to Speed
+
+When resuming work on this project:
+
+1. **Read the README.md** for a quick overview of features and tech stack
+2. **Review the .claude/ directory** for detailed technical documentation:
+   - `architecture.md` - System design and component relationships
+   - `frontend.md` - UI components (Board, GameControls, EvalBar, MoveList)
+   - `chess-engine.md` - Chess.js wrapper and move validation
+   - `stockfish.md` - Fairy-Stockfish WASM integration
+   - `deployment.md` - Cloudflare Workers deployment process
+3. **Check recent commits** with `git log --oneline -10` to understand recent changes
+4. **Run locally** with `npm run dev` to test at http://localhost:8787
+5. **Test the live site** at https://chess.emilycogsdill.com
+
+Key entry points:
+- `src/frontend/app.ts` - Main application that wires all components together
+- `src/frontend/components/` - UI components (Board, GameControls, EvalBar, MoveList)
+- `src/lib/stockfish/index.ts` - FairyStockfishClient for AI moves and analysis
+
 ## Project Overview
 
 Silly Chess is a web-based chess application with AI opponent powered by Stockfish. It's designed for extensibility to support custom chess variants in the future.
@@ -13,8 +33,7 @@ Silly Chess is a web-based chess application with AI opponent powered by Stockfi
 - AI Engine: Stockfish WASM via Web Worker
 - Build: Vite, Wrangler
 
-**Live URL**: https://silly-chess.emily-cogsdill.workers.dev
-**Future Domain**: https://chess.emilycogsdill.com
+**Live URL**: https://chess.emilycogsdill.com
 
 ## AI Behavior Guidelines
 
