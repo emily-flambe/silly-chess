@@ -46,6 +46,7 @@ export class MoveList {
     wrapper.className = 'move-list-wrapper';
     wrapper.innerHTML = `
       <div class="captured-pieces-section">
+        <div class="section-header">Captures</div>
         <div class="captured-row captured-by-white">
           <span class="captured-label">W:</span>
           <span class="captured-pieces" data-side="white"></span>
@@ -86,6 +87,15 @@ export class MoveList {
         border-bottom: 1px solid #333;
       }
 
+      .section-header {
+        font-size: 14px;
+        font-weight: 600;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+      }
+
       .captured-row {
         display: flex;
         align-items: center;
@@ -122,7 +132,8 @@ export class MoveList {
       }
 
       .captured-piece-black {
-        color: #333;
+        color: #111;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
       }
 
       .move-list-header {

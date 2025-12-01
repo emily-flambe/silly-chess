@@ -388,6 +388,24 @@ export class ChessBoard {
   }
 
   /**
+   * Show hint by highlighting from and to squares
+   */
+  showHint(from: string, to: string): void {
+    const fromSquare = this.getSquareElement(from);
+    const toSquare = this.getSquareElement(to);
+    if (fromSquare) fromSquare.classList.add('hint');
+    if (toSquare) toSquare.classList.add('hint');
+  }
+
+  /**
+   * Clear hint highlight
+   */
+  clearHint(): void {
+    const hintSquares = this.boardElement.querySelectorAll('.hint');
+    hintSquares.forEach(sq => sq.classList.remove('hint'));
+  }
+
+  /**
    * Clear the last move highlight
    */
   clearLastMove(): void {

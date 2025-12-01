@@ -20,6 +20,7 @@ export class GameControls {
   private newGameCallbacks: Array<(color: PlayerColor) => void> = [];
   private resignCallbacks: Array<() => void> = [];
   private undoCallbacks: Array<() => void> = [];
+  private hintCallbacks: Array<() => void> = [];
 
   private readonly STORAGE_KEY_COORDS = 'silly-chess-show-coords';
 
@@ -48,6 +49,10 @@ export class GameControls {
           <button class="control-btn undo-btn" ${!this.canUndo ? 'disabled' : ''}>
             <span class="btn-icon">←</span>
             Undo
+          </button>
+          <button class="control-btn hint-btn" ${!this.gameActive ? 'disabled' : ''}>
+            <span class="btn-icon">?</span>
+            Hint
           </button>
           <button class="control-btn settings-btn">
             <span class="btn-icon">⚙</span>
@@ -474,11 +479,13 @@ export class GameControls {
     const newGameBtn = this.container.querySelector('.new-game-btn');
     const resignBtn = this.container.querySelector('.resign-btn');
     const undoBtn = this.container.querySelector('.undo-btn');
+    const hintBtn = this.container.querySelector('.hint-btn');
     const settingsBtn = this.container.querySelector('.settings-btn');
 
     newGameBtn?.addEventListener('click', () => this.showModal());
     resignBtn?.addEventListener('click', () => this.handleResign());
     undoBtn?.addEventListener('click', () => this.handleUndo());
+    hintBtn?.addEventListener('click', () => this.handleHint());
     settingsBtn?.addEventListener('click', () => this.showSettings());
   }
 
@@ -539,6 +546,14 @@ export class GameControls {
   }
 
   /**
+   * Handle hint action
+   */
+  private handleHint(): void {
+    if (!this.gameActive) return;
+    this.hintCallbacks.forEach(callback => callback());
+  }
+
+  /**
    * Notify new game callbacks
    */
   private notifyNewGame(color: PlayerColor): void {
@@ -569,8 +584,12 @@ export class GameControls {
   public setGameActive(active: boolean): void {
     this.gameActive = active;
     const resignBtn = this.container.querySelector('.resign-btn') as HTMLButtonElement;
+    const hintBtn = this.container.querySelector('.hint-btn') as HTMLButtonElement;
     if (resignBtn) {
       resignBtn.disabled = !active;
+    }
+    if (hintBtn) {
+      hintBtn.disabled = !active;
     }
   }
 
@@ -604,6 +623,13 @@ export class GameControls {
    */
   public onUndo(callback: () => void): void {
     this.undoCallbacks.push(callback);
+  }
+
+  /**
+   * Register hint callback
+   */
+  public onHint(callback: () => void): void {
+    this.hintCallbacks.push(callback);
   }
 
   /**

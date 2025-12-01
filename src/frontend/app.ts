@@ -131,6 +131,10 @@ export class SillyChessApp {
       this.handleUndo();
     });
 
+    this.controls.onHint(() => {
+      this.handleHint();
+    });
+
     // Difficulty slider change
     const slider = this.controls.getDifficultySlider();
     if (slider) {
@@ -219,6 +223,9 @@ export class SillyChessApp {
     if (turn !== this.state.playerColor) {
       return;
     }
+
+    // Clear any hint highlight when player makes a move
+    this.board.clearHint();
 
     // Try to make the move
     const move = this.engine.move(from, to);
@@ -370,6 +377,42 @@ export class SillyChessApp {
     this.board.clearLastMove();
     this.moveList.clear();
     this.evalBar.reset();
+  }
+
+  /**
+   * Handle hint - show best move from Stockfish
+   */
+  private async handleHint(): Promise<void> {
+    if (!this.state.isGameActive || this.state.isThinking || !this.stockfish?.isReady()) {
+      return;
+    }
+
+    // Check if it's player's turn
+    const turn = this.engine.getStatus().turn;
+    if (turn !== this.state.playerColor) {
+      return;
+    }
+
+    this.setStatus('Calculating best move...');
+
+    try {
+      const fen = this.engine.getFEN();
+      const bestMove = await this.stockfish.getBestMove(fen);
+
+      if (bestMove && this.state.isGameActive) {
+        const from = bestMove.substring(0, 2);
+        const to = bestMove.substring(2, 4);
+
+        // Clear any previous hint and show the new one
+        this.board.clearHint();
+        this.board.showHint(from, to);
+
+        this.setStatus('Your turn');
+      }
+    } catch (error) {
+      console.error('Hint error:', error);
+      this.setStatus('Could not calculate hint');
+    }
   }
 
   /**
