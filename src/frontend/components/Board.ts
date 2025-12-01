@@ -222,11 +222,12 @@ export class ChessBoard {
   private makeMove(from: string, to: string): void {
     this.deselectSquare();
 
+    // Clear any previous move highlight - highlighting is only for selection preview
+    this.lastMove = null;
+
     // Notify listeners
     this.moveCallbacks.forEach(callback => callback(from, to));
 
-    // Update last move highlight
-    this.lastMove = { from, to };
     this.render();
   }
 
@@ -383,6 +384,14 @@ export class ChessBoard {
    */
   clearHighlights(): void {
     this.highlightedSquares.clear();
+    this.render();
+  }
+
+  /**
+   * Clear the last move highlight
+   */
+  clearLastMove(): void {
+    this.lastMove = null;
     this.render();
   }
 

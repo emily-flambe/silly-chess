@@ -81,7 +81,7 @@ export class GameControls {
 
         <div class="color-selection">
           <button class="color-btn" data-color="white">
-            <span class="color-icon">♔</span>
+            <span class="color-icon color-icon-white">&#9812;</span>
             <span class="color-label">White</span>
           </button>
           <button class="color-btn" data-color="random">
@@ -89,7 +89,7 @@ export class GameControls {
             <span class="color-label">Random</span>
           </button>
           <button class="color-btn" data-color="black">
-            <span class="color-icon">♚</span>
+            <span class="color-icon color-icon-black">&#9812;</span>
             <span class="color-label">Black</span>
           </button>
         </div>
@@ -319,6 +319,22 @@ export class GameControls {
 
       .color-icon {
         font-size: 48px;
+      }
+
+      /* Match actual piece styling */
+      .color-icon-white {
+        color: #fff;
+        text-shadow:
+          -1px -1px 0 #000,
+          1px -1px 0 #000,
+          -1px 1px 0 #000,
+          1px 1px 0 #000,
+          0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .color-icon-black {
+        color: #333;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
       }
 
       .color-label {

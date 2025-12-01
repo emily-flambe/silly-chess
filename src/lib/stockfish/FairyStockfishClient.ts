@@ -3,6 +3,7 @@
  *
  * WASM-based chess engine supporting 50+ variants.
  * Runs entirely in the browser via Web Worker.
+ * Uses blob URL approach for reliable cross-browser loading.
  */
 
 export interface FairyStockfishOptions {
@@ -16,7 +17,7 @@ export class FairyStockfishClient {
   private currentElo: number = 1500;
   private currentVariant: string = 'chess';
   private pendingResolve: ((value: string) => void) | null = null;
-  private messageBuffer: string[] = [];
+  private pendingReject: ((error: Error) => void) | null = null;
 
   /**
    * Initialize the Stockfish WASM engine
@@ -24,45 +25,59 @@ export class FairyStockfishClient {
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
+    // Load stockfish-lite-single.js directly as a Worker (it's self-contained)
+    // This version doesn't require SharedArrayBuffer
+    // Use original filename - the JS automatically looks for matching .wasm
+    const workerUrl = '/wasm/stockfish-17.1-lite-single-03e3232.js';
+
     return new Promise((resolve, reject) => {
       try {
-        // Create worker from the fairy-stockfish package
-        this.worker = new Worker(
-          new URL('fairy-stockfish-nnue.wasm/stockfish.js', import.meta.url),
-          { type: 'module' }
-        );
+        this.worker = new Worker(workerUrl);
 
-        this.worker.onmessage = (e) => {
-          const message = e.data;
-          this.handleMessage(message);
-        };
+        let uciOk = false;
+        let readyOk = false;
 
-        this.worker.onerror = (e) => {
-          console.error('Stockfish worker error:', e);
-          reject(e);
-        };
+        const initHandler = (event: MessageEvent) => {
+          const message = String(event.data);
 
-        // Wait for engine to be ready
-        const readyCheck = (msg: string) => {
-          if (msg.includes('Stockfish') || msg.includes('readyok')) {
-            this.isInitialized = true;
-            // Set initial UCI mode
-            this.sendCommand('uci');
-            setTimeout(() => {
+          // Handle multi-line responses
+          const lines = message.split('\n');
+          for (const line of lines) {
+            if (line.includes('uciok')) {
+              uciOk = true;
               this.sendCommand('isready');
+            } else if (line.includes('readyok')) {
+              readyOk = true;
+            }
+          }
+
+          if (uciOk && readyOk) {
+            this.worker?.removeEventListener('message', initHandler);
+            this.isInitialized = true;
+            this.setupMessageHandler();
+
+            // Set default Elo
+            this.setElo(this.currentElo).then(() => {
               resolve();
-            }, 100);
+            }).catch(reject);
           }
         };
 
-        const originalHandler = this.handleMessage.bind(this);
-        this.handleMessage = (msg: string) => {
-          readyCheck(msg);
-          originalHandler(msg);
-        };
+        this.worker.addEventListener('message', initHandler);
+        this.worker.addEventListener('error', (error) => {
+          reject(new Error(`Stockfish worker failed to initialize: ${error.message}`));
+        });
 
-        // Trigger initialization
+        // Start UCI initialization
         this.sendCommand('uci');
+
+        // Timeout after 15 seconds
+        setTimeout(() => {
+          if (!this.isInitialized) {
+            reject(new Error('Stockfish initialization timeout'));
+          }
+        }, 15000);
+
       } catch (error) {
         reject(error);
       }
@@ -70,20 +85,28 @@ export class FairyStockfishClient {
   }
 
   /**
-   * Handle messages from the worker
+   * Setup persistent message handler for bestmove responses
    */
-  private handleMessage(message: string): void {
-    this.messageBuffer.push(message);
+  private setupMessageHandler(): void {
+    if (!this.worker) return;
 
-    // Check for bestmove response
-    if (message.startsWith('bestmove')) {
-      const parts = message.split(' ');
-      const move = parts[1];
-      if (this.pendingResolve && move) {
-        this.pendingResolve(move);
-        this.pendingResolve = null;
+    this.worker.addEventListener('message', (event: MessageEvent) => {
+      const message = String(event.data);
+
+      if (message.startsWith('bestmove')) {
+        const parts = message.split(' ');
+        const move = parts[1];
+        if (this.pendingResolve && move && move !== '(none)') {
+          this.pendingResolve(move);
+          this.pendingResolve = null;
+          this.pendingReject = null;
+        } else if (this.pendingReject) {
+          this.pendingReject(new Error('No legal move found'));
+          this.pendingResolve = null;
+          this.pendingReject = null;
+        }
       }
-    }
+    });
   }
 
   /**
@@ -114,13 +137,21 @@ export class FairyStockfishClient {
 
   /**
    * Set Elo rating for AI difficulty
+   * At max Elo (3000), disables strength limiting for full power
    */
   async setElo(elo: number): Promise<void> {
     this.currentElo = Math.max(800, Math.min(3000, elo));
 
-    // UCI_LimitStrength and UCI_Elo are standard UCI options
-    this.sendCommand('setoption name UCI_LimitStrength value true');
-    this.sendCommand(`setoption name UCI_Elo value ${this.currentElo}`);
+    // At max difficulty, disable strength limiting for full engine power
+    if (this.currentElo >= 3000) {
+      this.sendCommand('setoption name UCI_LimitStrength value false');
+    } else {
+      // UCI_LimitStrength and UCI_Elo are standard UCI options
+      this.sendCommand('setoption name UCI_LimitStrength value true');
+      this.sendCommand(`setoption name UCI_Elo value ${this.currentElo}`);
+    }
+    this.sendCommand('isready');
+    await this.waitForReady();
   }
 
   /**
@@ -138,17 +169,14 @@ export class FairyStockfishClient {
   }
 
   /**
-   * Map Elo rating to analysis depth (fallback if UCI_Elo not supported)
+   * Get search depth for move calculation
+   * Uses consistent depth - UCI_LimitStrength handles difficulty scaling
    */
   private getDepthForElo(): number {
-    if (this.currentElo <= 1000) return 4;
-    if (this.currentElo <= 1200) return 6;
-    if (this.currentElo <= 1400) return 8;
-    if (this.currentElo <= 1600) return 10;
-    if (this.currentElo <= 1800) return 12;
-    if (this.currentElo <= 2000) return 14;
-    if (this.currentElo <= 2400) return 16;
-    return 18;
+    // Use a reasonable depth for all levels
+    // UCI_LimitStrength + UCI_Elo handle the actual difficulty
+    // Higher depth just means better move quality at each Elo level
+    return 20;
   }
 
   /**
@@ -156,16 +184,25 @@ export class FairyStockfishClient {
    */
   private waitForReady(): Promise<void> {
     return new Promise((resolve) => {
-      const checkReady = () => {
-        const lastMessages = this.messageBuffer.slice(-5);
-        if (lastMessages.some(m => m.includes('readyok'))) {
+      if (!this.worker) {
+        resolve();
+        return;
+      }
+
+      const readyHandler = (event: MessageEvent) => {
+        if (String(event.data).includes('readyok')) {
+          this.worker?.removeEventListener('message', readyHandler);
           resolve();
-        } else {
-          setTimeout(checkReady, 50);
         }
       };
-      this.sendCommand('isready');
-      setTimeout(checkReady, 50);
+
+      this.worker.addEventListener('message', readyHandler);
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        this.worker?.removeEventListener('message', readyHandler);
+        resolve();
+      }, 5000);
     });
   }
 
@@ -181,7 +218,7 @@ export class FairyStockfishClient {
 
     return new Promise((resolve, reject) => {
       this.pendingResolve = resolve;
-      this.messageBuffer = [];
+      this.pendingReject = reject;
 
       // Set position and search
       this.sendCommand(`position fen ${fen}`);
@@ -191,6 +228,7 @@ export class FairyStockfishClient {
       setTimeout(() => {
         if (this.pendingResolve) {
           this.pendingResolve = null;
+          this.pendingReject = null;
           reject(new Error('Stockfish timeout'));
         }
       }, 30000);
@@ -212,59 +250,61 @@ export class FairyStockfishClient {
     const depth = options?.depth ?? 12;
 
     return new Promise((resolve, reject) => {
-      this.messageBuffer = [];
+      if (!this.worker) {
+        reject(new Error('Worker not initialized'));
+        return;
+      }
+
       let evaluation: number | string = 0;
       let bestMove = '';
       let actualDepth = depth;
 
-      const parseMessages = () => {
+      const analyzeHandler = (event: MessageEvent) => {
+        const msg = String(event.data);
+
         // Parse info lines for evaluation
-        for (const msg of this.messageBuffer) {
-          if (msg.startsWith('info') && msg.includes('score')) {
-            const cpMatch = msg.match(/score cp (-?\d+)/);
-            const mateMatch = msg.match(/score mate (-?\d+)/);
-            const depthMatch = msg.match(/depth (\d+)/);
+        if (msg.startsWith('info') && msg.includes('score')) {
+          const cpMatch = msg.match(/score cp (-?\d+)/);
+          const mateMatch = msg.match(/score mate (-?\d+)/);
+          const depthMatch = msg.match(/depth (\d+)/);
 
-            if (mateMatch) {
-              const mateIn = parseInt(mateMatch[1], 10);
-              evaluation = `M${Math.abs(mateIn)}`;
-              if (mateIn < 0) evaluation = `-${evaluation}`;
-            } else if (cpMatch) {
-              evaluation = parseInt(cpMatch[1], 10);
-            }
-
-            if (depthMatch) {
-              actualDepth = parseInt(depthMatch[1], 10);
-            }
+          if (mateMatch) {
+            const mateIn = parseInt(mateMatch[1], 10);
+            evaluation = `M${Math.abs(mateIn)}`;
+            if (mateIn < 0) evaluation = `-${evaluation}`;
+          } else if (cpMatch) {
+            evaluation = parseInt(cpMatch[1], 10);
           }
 
-          if (msg.startsWith('bestmove')) {
-            bestMove = msg.split(' ')[1];
+          if (depthMatch) {
+            actualDepth = parseInt(depthMatch[1], 10);
           }
+        }
+
+        if (msg.startsWith('bestmove')) {
+          this.worker?.removeEventListener('message', analyzeHandler);
+          bestMove = msg.split(' ')[1] || '';
+
+          const evalNum = typeof evaluation === 'number' ? evaluation : 0;
+          const winChance = 50 + (evalNum / 10); // Rough approximation
+
+          resolve({
+            bestMove,
+            evaluation,
+            depth: actualDepth,
+            winChance: Math.max(0, Math.min(100, winChance)),
+          });
         }
       };
 
-      this.pendingResolve = (move) => {
-        parseMessages();
-        const evalNum = typeof evaluation === 'number' ? evaluation : 0;
-        const winChance = 50 + (evalNum / 10); // Rough approximation
-
-        resolve({
-          bestMove: bestMove || move,
-          evaluation,
-          depth: actualDepth,
-          winChance: Math.max(0, Math.min(100, winChance)),
-        });
-      };
+      this.worker.addEventListener('message', analyzeHandler);
 
       this.sendCommand(`position fen ${fen}`);
       this.sendCommand(`go depth ${depth}`);
 
       setTimeout(() => {
-        if (this.pendingResolve) {
-          this.pendingResolve = null;
-          reject(new Error('Analysis timeout'));
-        }
+        this.worker?.removeEventListener('message', analyzeHandler);
+        reject(new Error('Analysis timeout'));
       }, 30000);
     });
   }

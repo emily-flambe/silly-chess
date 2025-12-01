@@ -35,6 +35,7 @@ export class SillyChessApp {
     controls: HTMLElement;
     evalBar: HTMLElement;
     status: HTMLElement;
+    difficultyDisplay: HTMLElement;
   };
 
   constructor() {
@@ -43,8 +44,9 @@ export class SillyChessApp {
     const controlsContainer = document.getElementById('controls-container');
     const evalBarContainer = document.getElementById('eval-bar-container');
     const statusContainer = document.getElementById('status-container');
+    const difficultyDisplay = document.getElementById('difficulty-display');
 
-    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer) {
+    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay) {
       throw new Error('Required container elements not found');
     }
 
@@ -53,6 +55,7 @@ export class SillyChessApp {
       controls: controlsContainer,
       evalBar: evalBarContainer,
       status: statusContainer,
+      difficultyDisplay: difficultyDisplay,
     };
 
     this.initialize();
@@ -125,7 +128,11 @@ export class SillyChessApp {
     // Difficulty slider change
     const slider = this.controls.getDifficultySlider();
     if (slider) {
+      // Set initial difficulty display
+      this.updateDifficultyDisplay(slider.getElo());
+
       slider.onChange(async (elo) => {
+        this.updateDifficultyDisplay(elo);
         if (this.stockfish?.isReady()) {
           await this.stockfish.setElo(elo);
         }
@@ -134,11 +141,36 @@ export class SillyChessApp {
   }
 
   /**
+   * Update the difficulty display above the board
+   */
+  private updateDifficultyDisplay(elo: number): void {
+    const label = this.getDifficultyLabel(elo);
+    this.containers.difficultyDisplay.textContent = `${label} (${elo})`;
+  }
+
+  /**
+   * Get human-readable difficulty label for Elo
+   */
+  private getDifficultyLabel(elo: number): string {
+    if (elo <= 900) return 'Beginner';
+    if (elo <= 1100) return 'Novice';
+    if (elo <= 1300) return 'Casual';
+    if (elo <= 1500) return 'Club';
+    if (elo <= 1700) return 'Intermediate';
+    if (elo <= 1900) return 'Advanced';
+    if (elo <= 2100) return 'Strong';
+    if (elo <= 2400) return 'Expert';
+    if (elo <= 2700) return 'Master';
+    return 'Maximum';
+  }
+
+  /**
    * Start a new game
    */
   private async startNewGame(playerColor: 'white' | 'black'): Promise<void> {
-    // Reset engine
+    // Reset engine and clear board highlights
     this.engine.reset();
+    this.board.clearLastMove();
 
     // Update state
     this.state.playerColor = playerColor;
@@ -321,6 +353,11 @@ export class SillyChessApp {
 
     const winner = this.state.playerColor === 'white' ? 'Black' : 'White';
     this.endGame(`You resigned. ${winner} wins.`);
+
+    // Reset board to starting position and clear highlights
+    this.engine.reset();
+    this.board.clearLastMove();
+    this.evalBar.reset();
   }
 
   /**

@@ -1,0 +1,1 @@
+Package version not found: stockfish.wasm@1.0.0

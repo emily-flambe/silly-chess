@@ -67,6 +67,19 @@
       gap: 0.5rem;
     }
 
+    .board-wrapper {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .difficulty-display {
+      text-align: center;
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      color: #666;
+      letter-spacing: 0.5px;
+    }
+
     #board-container {
       width: min(80vw, 560px);
       height: min(80vw, 560px);
@@ -209,8 +222,11 @@
     <div class="game-container">
       <div class="board-area">
         <div id="eval-bar-container"></div>
-        <div id="board-container">
-          <div class="loading">Loading</div>
+        <div class="board-wrapper">
+          <div id="difficulty-display" class="difficulty-display"></div>
+          <div id="board-container">
+            <div class="loading">Loading</div>
+          </div>
         </div>
       </div>
 
