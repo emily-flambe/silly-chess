@@ -308,17 +308,26 @@ export class SillyChessApp {
       const fen = this.engine.getFEN();
       const analysis = await this.stockfish.analyze(fen, { depth: 12 });
 
+      // Stockfish returns evaluation from the side-to-move's perspective
+      // We need to convert to white's perspective (positive = white advantage)
+      const isBlackToMove = this.engine.getStatus().turn === 'black';
+
       if (typeof analysis.evaluation === 'string') {
         // Mate score
         const mateMatch = analysis.evaluation.match(/^-?M(\d+)$/);
         if (mateMatch) {
           const moves = parseInt(mateMatch[1], 10);
-          const isNegative = analysis.evaluation.startsWith('-');
+          let isNegative = analysis.evaluation.startsWith('-');
+          // Flip sign if it's black's turn (convert to white's perspective)
+          if (isBlackToMove) isNegative = !isNegative;
           this.evalBar.setMate(isNegative ? -moves : moves);
         }
       } else {
-        // Centipawn score
-        this.evalBar.setEvaluation(analysis.evaluation);
+        // Centipawn score - flip sign if black to move
+        const evalFromWhitePerspective = isBlackToMove
+          ? -analysis.evaluation
+          : analysis.evaluation;
+        this.evalBar.setEvaluation(evalFromWhitePerspective);
       }
     } catch (error) {
       console.error('Evaluation error:', error);
