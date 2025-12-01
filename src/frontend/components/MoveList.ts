@@ -1,9 +1,30 @@
 /**
  * Move List Component
  * Displays game moves in standard chess notation with auto-scroll to latest move.
+ * Also shows captured pieces for each side.
  */
 
-import type { Move } from '../../types';
+import type { Move, PieceType } from '../../types';
+
+// Unicode chess piece symbols (filled style)
+const PIECE_SYMBOLS: Record<PieceType, string> = {
+  'k': '\u265A',
+  'q': '\u265B',
+  'r': '\u265C',
+  'b': '\u265D',
+  'n': '\u265E',
+  'p': '\u265F',
+};
+
+// Piece values for sorting captured pieces
+const PIECE_VALUES: Record<PieceType, number> = {
+  'q': 9,
+  'r': 5,
+  'b': 3,
+  'n': 3,
+  'p': 1,
+  'k': 0, // King can't be captured
+};
 
 export class MoveList {
   private container: HTMLElement;
@@ -24,6 +45,16 @@ export class MoveList {
     const wrapper = document.createElement('div');
     wrapper.className = 'move-list-wrapper';
     wrapper.innerHTML = `
+      <div class="captured-pieces-section">
+        <div class="captured-row captured-by-white">
+          <span class="captured-label">W:</span>
+          <span class="captured-pieces" data-side="white"></span>
+        </div>
+        <div class="captured-row captured-by-black">
+          <span class="captured-label">B:</span>
+          <span class="captured-pieces" data-side="black"></span>
+        </div>
+      </div>
       <div class="move-list-header">Moves</div>
       <div class="move-list-content"></div>
     `;
@@ -48,6 +79,50 @@ export class MoveList {
         height: 100%;
         min-height: 200px;
         max-height: 560px;
+      }
+
+      .captured-pieces-section {
+        padding: 8px 12px;
+        border-bottom: 1px solid #333;
+      }
+
+      .captured-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 24px;
+      }
+
+      .captured-label {
+        font-size: 11px;
+        color: #666;
+        font-weight: 600;
+        min-width: 18px;
+      }
+
+      .captured-pieces {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1px;
+        font-size: 18px;
+        line-height: 1;
+      }
+
+      .captured-piece {
+        opacity: 0.9;
+      }
+
+      .captured-piece-white {
+        color: #fff;
+        text-shadow:
+          -1px -1px 0 #000,
+          1px -1px 0 #000,
+          -1px 1px 0 #000,
+          1px 1px 0 #000;
+      }
+
+      .captured-piece-black {
+        color: #333;
       }
 
       .move-list-header {
@@ -175,6 +250,9 @@ export class MoveList {
     const content = this.listElement.querySelector('.move-list-content');
     if (!content) return;
 
+    // Render captured pieces
+    this.renderCapturedPieces();
+
     if (this.moves.length === 0) {
       content.innerHTML = '<div class="move-list-empty">No moves yet</div>';
       return;
@@ -222,6 +300,45 @@ export class MoveList {
     }
 
     return notation;
+  }
+
+  /**
+   * Render captured pieces for each side
+   */
+  private renderCapturedPieces(): void {
+    const whiteCapturesContainer = this.listElement.querySelector('.captured-pieces[data-side="white"]');
+    const blackCapturesContainer = this.listElement.querySelector('.captured-pieces[data-side="black"]');
+
+    if (!whiteCapturesContainer || !blackCapturesContainer) return;
+
+    // Collect captured pieces by side
+    const capturedByWhite: PieceType[] = []; // Black pieces captured by white
+    const capturedByBlack: PieceType[] = []; // White pieces captured by black
+
+    this.moves.forEach((move, index) => {
+      if (move.captured) {
+        // Even index = white's move, odd index = black's move
+        if (index % 2 === 0) {
+          capturedByWhite.push(move.captured);
+        } else {
+          capturedByBlack.push(move.captured);
+        }
+      }
+    });
+
+    // Sort by value (highest first)
+    const sortByValue = (a: PieceType, b: PieceType) => PIECE_VALUES[b] - PIECE_VALUES[a];
+    capturedByWhite.sort(sortByValue);
+    capturedByBlack.sort(sortByValue);
+
+    // Render captured pieces
+    whiteCapturesContainer.innerHTML = capturedByWhite
+      .map(p => `<span class="captured-piece captured-piece-black">${PIECE_SYMBOLS[p]}</span>`)
+      .join('');
+
+    blackCapturesContainer.innerHTML = capturedByBlack
+      .map(p => `<span class="captured-piece captured-piece-white">${PIECE_SYMBOLS[p]}</span>`)
+      .join('');
   }
 
   /**
