@@ -530,11 +530,7 @@ export class GameControls {
    */
   private handleResign(): void {
     if (!this.gameActive) return;
-
-    const confirmed = confirm('Are you sure you want to resign?');
-    if (confirmed) {
-      this.resignCallbacks.forEach(callback => callback());
-    }
+    this.resignCallbacks.forEach(callback => callback());
   }
 
   /**

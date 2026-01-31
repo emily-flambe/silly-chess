@@ -310,10 +310,12 @@ export class FairyStockfishClient {
   }
 
   /**
-   * Stop current analysis
+   * Stop current analysis and wait for engine to be ready
    */
   async stop(): Promise<void> {
     this.sendCommand('stop');
+    this.sendCommand('isready');
+    await this.waitForReady();
   }
 
   /**

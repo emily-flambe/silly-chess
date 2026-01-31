@@ -178,8 +178,14 @@ export class SillyChessApp {
    * Start a new game
    */
   private async startNewGame(playerColor: 'white' | 'black'): Promise<void> {
+    // Stop any pending analysis from previous game to avoid stale eval values
+    if (this.stockfish?.isReady()) {
+      await this.stockfish.stop();
+    }
+
     // Reset engine and clear board highlights
     this.engine.reset();
+    this.board.clearHint();
     this.board.clearLastMove();
     this.moveList.clear();
 
@@ -436,6 +442,11 @@ export class SillyChessApp {
     this.engine.undo();
     // Undo player's move
     this.engine.undo();
+
+    // Update the board visually
+    this.board.update();
+    this.board.clearLastMove();
+    this.board.clearHint();
 
     // Update move list
     this.moveList.update(this.engine.getState().moveHistory);
