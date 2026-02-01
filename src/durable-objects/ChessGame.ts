@@ -85,7 +85,6 @@ export class ChessGame {
   private env: { DB: D1Database };
   private chess: Chess;
   private gameState: GameState | null = null;
-  private sessions: Set<WebSocket> = new Set();
 
   constructor(state: DurableObjectState, env: { DB: D1Database }) {
     this.state = state;
@@ -97,6 +96,14 @@ export class ChessGame {
    * Handle incoming HTTP requests (REST or WebSocket upgrade)
    */
   async fetch(request: Request): Promise<Response> {
+    // Restore game state from storage if needed (after hibernation wake-up)
+    if (!this.gameState) {
+      this.gameState = await this.state.storage.get<GameState>('gameState') || null;
+      if (this.gameState) {
+        this.chess.load(this.gameState.fen);
+      }
+    }
+
     const url = new URL(request.url);
     
     // Handle WebSocket upgrade
@@ -134,9 +141,8 @@ export class ChessGame {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
 
-    // Accept the WebSocket connection
+    // Accept the WebSocket connection (hibernation API)
     this.state.acceptWebSocket(server);
-    this.sessions.add(server);
 
     // Send current game state if game exists
     if (this.gameState) {
@@ -150,6 +156,14 @@ export class ChessGame {
    * Handle WebSocket messages (called by runtime)
    */
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    // Restore game state from storage if needed (after hibernation wake-up)
+    if (!this.gameState) {
+      this.gameState = await this.state.storage.get<GameState>('gameState') || null;
+      if (this.gameState) {
+        this.chess.load(this.gameState.fen);
+      }
+    }
+
     try {
       const data = JSON.parse(message as string) as WSMessage;
       
@@ -176,10 +190,27 @@ export class ChessGame {
   }
 
   /**
+   * Handle WebSocket open (called after hibernation wake-up)
+   */
+  async webSocketOpen(ws: WebSocket): Promise<void> {
+    // Restore game state from storage if needed
+    if (!this.gameState) {
+      this.gameState = await this.state.storage.get<GameState>('gameState') || null;
+      if (this.gameState) {
+        this.chess.load(this.gameState.fen);
+      }
+    }
+    // Send current game state to the reconnected client
+    if (this.gameState) {
+      this.sendToSocket(ws, this.buildGameStateMessage());
+    }
+  }
+
+  /**
    * Handle WebSocket close
    */
   async webSocketClose(ws: WebSocket): Promise<void> {
-    this.sessions.delete(ws);
+    // No need to manage sessions manually with hibernation API
   }
 
   /**
@@ -187,7 +218,6 @@ export class ChessGame {
    */
   async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
     console.error('WebSocket error:', error);
-    this.sessions.delete(ws);
   }
 
   /**
@@ -587,11 +617,13 @@ export class ChessGame {
    */
   private broadcast(message: WSMessage): void {
     const data = JSON.stringify(message);
-    for (const ws of this.sessions) {
+    // Use getWebSockets() for hibernation compatibility
+    const sockets = this.state.getWebSockets();
+    for (const ws of sockets) {
       try {
         ws.send(data);
       } catch (error) {
-        this.sessions.delete(ws);
+        // Socket will be cleaned up by webSocketClose/webSocketError
       }
     }
   }
