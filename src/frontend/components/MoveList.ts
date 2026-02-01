@@ -4,6 +4,7 @@
  * Also shows captured pieces for each side.
  */
 
+import { Chess } from 'chess.js';
 import type { Move, PieceType } from '../../types';
 
 // Unicode chess piece symbols (filled style)
@@ -284,11 +285,8 @@ export class MoveList {
     const content = this.listElement.querySelector('.move-list-content');
     if (!content) return;
 
-    // Clear captured pieces in SAN mode (we don't have capture info)
-    const whiteCapturesContainer = this.listElement.querySelector('.captured-pieces[data-side="white"]');
-    const blackCapturesContainer = this.listElement.querySelector('.captured-pieces[data-side="black"]');
-    if (whiteCapturesContainer) whiteCapturesContainer.innerHTML = '';
-    if (blackCapturesContainer) blackCapturesContainer.innerHTML = '';
+    // Extract captures by replaying the game with chess.js
+    this.renderCapturedPiecesFromSAN();
 
     if (this.sanMoves.length === 0) {
       content.innerHTML = '<div class="move-list-empty">No moves yet</div>';
@@ -508,6 +506,59 @@ export class MoveList {
         }
       }
     });
+
+    // Sort by value (highest first)
+    const sortByValue = (a: PieceType, b: PieceType) => PIECE_VALUES[b] - PIECE_VALUES[a];
+    capturedByWhite.sort(sortByValue);
+    capturedByBlack.sort(sortByValue);
+
+    // Render captured pieces
+    whiteCapturesContainer.innerHTML = capturedByWhite
+      .map(p => `<span class="captured-piece captured-piece-black">${PIECE_SYMBOLS[p]}</span>`)
+      .join('');
+
+    blackCapturesContainer.innerHTML = capturedByBlack
+      .map(p => `<span class="captured-piece captured-piece-white">${PIECE_SYMBOLS[p]}</span>`)
+      .join('');
+  }
+
+  /**
+   * Render captured pieces by replaying SAN moves with chess.js
+   * Used in server mode when we only have SAN notation
+   */
+  private renderCapturedPiecesFromSAN(): void {
+    const whiteCapturesContainer = this.listElement.querySelector('.captured-pieces[data-side="white"]');
+    const blackCapturesContainer = this.listElement.querySelector('.captured-pieces[data-side="black"]');
+
+    if (!whiteCapturesContainer || !blackCapturesContainer) return;
+
+    // Collect captured pieces by replaying the game
+    const capturedByWhite: PieceType[] = []; // Black pieces captured by white
+    const capturedByBlack: PieceType[] = []; // White pieces captured by black
+
+    if (this.sanMoves.length > 0) {
+      const chess = new Chess();
+      
+      for (let i = 0; i < this.sanMoves.length; i++) {
+        const san = this.sanMoves[i];
+        try {
+          const move = chess.move(san);
+          if (move && move.captured) {
+            // chess.js returns captured piece type in lowercase (e.g., 'p', 'n', 'b', 'r', 'q')
+            const capturedPiece = move.captured as PieceType;
+            // Even index = white's move, odd index = black's move
+            if (i % 2 === 0) {
+              capturedByWhite.push(capturedPiece);
+            } else {
+              capturedByBlack.push(capturedPiece);
+            }
+          }
+        } catch (e) {
+          console.error('Failed to replay move:', san, e);
+          break;
+        }
+      }
+    }
 
     // Sort by value (highest first)
     const sortByValue = (a: PieceType, b: PieceType) => PIECE_VALUES[b] - PIECE_VALUES[a];
