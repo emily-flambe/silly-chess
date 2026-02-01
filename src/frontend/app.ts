@@ -204,6 +204,11 @@ export class SillyChessApp {
       return;
     }
 
+    // Only update if FEN has changed (avoid duplicate updates from race conditions)
+    if (this.state.fen === result.fen) {
+      return;
+    }
+
     // Update local state
     this.state.fen = result.fen;
     this.state.turn = result.turn;
@@ -574,6 +579,8 @@ export class SillyChessApp {
       const bestMove = await this.stockfish.getBestMove(this.state.fen);
 
       if (!bestMove || !this.state.isGameActive) {
+        // Update status on early return so UI doesn't stay stuck
+        this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
         return;
       }
 
@@ -592,19 +599,22 @@ export class SillyChessApp {
       const result = await this.gameClient.submitAIMove(bestMove, thinkingTime, evaluation);
 
       if (result.success) {
-        // Update local state
-        this.state.fen = result.fen;
-        this.state.turn = result.turn;
-        this.state.fenHistory.push(result.fen); // Track position history
-        
-        // Track SAN move and update move list
-        if (result.san) {
-          this.state.sanMoves.push(result.san);
-          this.moveList.updateFromSAN(this.state.sanMoves);
-        }
+        // Only update state if event handler hasn't already (avoid duplicates)
+        if (this.state.fen !== result.fen) {
+          this.state.fen = result.fen;
+          this.state.turn = result.turn;
+          this.state.fenHistory.push(result.fen);
+          
+          // Track SAN move and update move list
+          if (result.san) {
+            this.state.sanMoves.push(result.san);
+            this.moveList.updateFromSAN(this.state.sanMoves);
+          }
 
-        // Update board
-        this.board.setPosition(result.fen);
+          // Update board
+          this.board.setPosition(result.fen);
+        }
+        
         if (result.lastMove) {
           this.board.setLastMove(result.lastMove.from, result.lastMove.to);
         }
@@ -624,6 +634,10 @@ export class SillyChessApp {
       this.state.isThinking = false;
       if (this.state.isGameActive) {
         this.board.setInteractive(true);
+      }
+      // Safety: ensure status is sensible if still showing "AI is thinking..."
+      if (this.containers.status.textContent === 'AI is thinking...') {
+        this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
       }
     }
   }

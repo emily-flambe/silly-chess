@@ -178,6 +178,13 @@ export class GameClient {
    * Handle WebSocket disconnect
    */
   private handleDisconnect(): void {
+    // Reject any pending move promises immediately so UI doesn't hang
+    if (this.pendingMoveReject) {
+      this.pendingMoveReject(new Error('Connection lost'));
+      this.pendingMoveResolve = null;
+      this.pendingMoveReject = null;
+    }
+
     if (this.reconnectAttempts < this.maxReconnectAttempts && this.gameId) {
       this.reconnectAttempts++;
       const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
