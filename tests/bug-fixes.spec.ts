@@ -21,7 +21,8 @@ test.describe('Bug Fixes', () => {
     // Make a move first so resign is meaningful
     await page.locator('[data-square="e2"]').click();
     await page.locator('[data-square="e4"]').click();
-    await expect(page.locator('#status-container')).toContainText('Your turn', { timeout: 30000 });
+    // Wait for AI to finish (may take longer on CI)
+    await expect(page.locator('#status-container')).toContainText('Your turn', { timeout: 60000 });
 
     // Click Resign
     await page.getByRole('button', { name: /resign/i }).click();
@@ -49,7 +50,8 @@ test.describe('Bug Fixes', () => {
     // Start a new game
     await page.getByRole('button', { name: /new game/i }).click();
     await page.locator('.color-btn[data-color="white"]').click();
-    await expect(page.locator('#status-container')).toContainText(/Game started/i, { timeout: 5000 });
+    // Status could be "Game started" or already "Your turn" depending on timing
+    await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
     // Hint highlights should be cleared
     const hintSquares = await page.locator('.square.hint').count();
