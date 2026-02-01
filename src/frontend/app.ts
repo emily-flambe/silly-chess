@@ -23,6 +23,8 @@ interface AppState {
   fen: string;
   turn: 'w' | 'b';
   aiElo: number;
+  fenHistory: string[]; // FEN after each move (index 0 = after first move)
+  viewingHistoryIndex: number; // -1 = current position, 0+ = viewing historical position
 }
 
 export class SillyChessApp {
@@ -33,6 +35,8 @@ export class SillyChessApp {
   private stockfish!: FairyStockfishClient;
   private gameClient!: GameClient;
 
+  private readonly START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
   private state: AppState = {
     gameId: null,
     playerColor: 'white',
@@ -41,6 +45,8 @@ export class SillyChessApp {
     fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
     turn: 'w',
     aiElo: 1500,
+    fenHistory: [],
+    viewingHistoryIndex: -1, // -1 means viewing current position
   };
 
   private readonly containers: {
@@ -161,6 +167,11 @@ export class SillyChessApp {
     this.state.fen = gameState.fen;
     this.state.turn = gameState.turn;
     this.state.isGameActive = gameState.status === 'active';
+    this.state.viewingHistoryIndex = -1;
+    
+    // Note: FEN history isn't available from server sync - would need to replay moves
+    // For reconnected games, history navigation won't work until new moves are made
+    this.state.fenHistory = [];
 
     // Update board
     this.board.setPosition(gameState.fen);
@@ -193,6 +204,10 @@ export class SillyChessApp {
     // Update local state
     this.state.fen = result.fen;
     this.state.turn = result.turn;
+    
+    // Track FEN history
+    this.state.fenHistory.push(result.fen);
+    this.state.viewingHistoryIndex = -1; // Reset to viewing current
 
     // Update board
     this.board.setPosition(result.fen);
@@ -213,6 +228,36 @@ export class SillyChessApp {
         this.handleGameEnd('draw');
       }
     }
+  }
+
+  /**
+   * View a historical position (without undoing moves)
+   */
+  private viewHistoricalPosition(moveIndex: number): void {
+    if (moveIndex === -1) {
+      // View current position
+      this.state.viewingHistoryIndex = -1;
+      this.board.setPosition(this.state.fen);
+      this.board.setInteractive(this.state.isGameActive && !this.state.isThinking);
+      this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
+      return;
+    }
+
+    // View historical position
+    this.state.viewingHistoryIndex = moveIndex;
+    
+    // Get the FEN for this position
+    const historicalFen = moveIndex >= 0 && moveIndex < this.state.fenHistory.length
+      ? this.state.fenHistory[moveIndex]
+      : this.START_FEN;
+    
+    this.board.setPosition(historicalFen);
+    this.board.clearLastMove();
+    this.board.setInteractive(false); // Can't move when viewing history
+    
+    const moveNum = Math.floor(moveIndex / 2) + 1;
+    const isWhiteMove = moveIndex % 2 === 0;
+    this.setStatus(`Viewing move ${moveNum}${isWhiteMove ? '.' : '...'} (use → to return)`);
   }
 
   /**
@@ -266,8 +311,39 @@ export class SillyChessApp {
     });
 
     this.controls.onUndo(() => {
-      // Undo is more complex with server state - disable for now
-      this.setStatus('Undo not available in online mode');
+      // Navigate back in history instead of undo
+      if (this.state.fenHistory.length > 0) {
+        this.moveList.goBack();
+      }
+    });
+
+    // Move list position navigation
+    this.moveList.onPositionSelect((moveIndex) => {
+      this.viewHistoricalPosition(moveIndex);
+    });
+
+    // Keyboard navigation for move history
+    document.addEventListener('keydown', (e) => {
+      if (!this.state.isGameActive) return;
+      
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          this.moveList.goBack();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          this.moveList.goForward();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          this.moveList.goToStart();
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          this.moveList.goToEnd();
+          break;
+      }
     });
 
     this.controls.onHint(() => {
@@ -341,6 +417,8 @@ export class SillyChessApp {
       this.state.isThinking = false;
       this.state.fen = gameState.fen;
       this.state.turn = gameState.turn;
+      this.state.fenHistory = []; // Reset history for new game
+      this.state.viewingHistoryIndex = -1;
 
       // Save for reconnection
       localStorage.setItem('silly-chess-game-id', gameId);
@@ -381,6 +459,12 @@ export class SillyChessApp {
       return;
     }
 
+    // Don't allow moves when viewing history
+    if (this.state.viewingHistoryIndex !== -1) {
+      this.setStatus('Return to current position to make a move (→ key)');
+      return;
+    }
+
     // Check if it's player's turn
     const currentTurn = this.state.turn === 'w' ? 'white' : 'black';
     if (currentTurn !== this.state.playerColor) {
@@ -404,6 +488,7 @@ export class SillyChessApp {
       // Update local state
       this.state.fen = result.fen;
       this.state.turn = result.turn;
+      this.state.fenHistory.push(result.fen); // Track position history
 
       // Update board
       this.board.setPosition(result.fen);
@@ -465,6 +550,7 @@ export class SillyChessApp {
         // Update local state
         this.state.fen = result.fen;
         this.state.turn = result.turn;
+        this.state.fenHistory.push(result.fen); // Track position history
 
         // Update board
         this.board.setPosition(result.fen);

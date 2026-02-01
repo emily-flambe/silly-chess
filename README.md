@@ -38,10 +38,43 @@ npm run build
 
 # Deploy to Cloudflare
 npm run deploy
+```
 
-# Run E2E tests
+### Running Tests
+
+**macOS/Linux:**
+```bash
+# Start dev server and run tests
+npm run dev &
 npx playwright test
 ```
+
+**Windows (Workaround):**
+
+There's a known issue with Wrangler's dev proxy on Windows where port 8787 doesn't respond. Use the internal worker port instead:
+
+```powershell
+# 1. Start dev server with debug logging
+$env:WRANGLER_LOG = "debug"
+npm run dev
+
+# 2. Find the internal port in the output (look for "userWorkerUrl"):
+#    "userWorkerUrl":{"protocol":"http:","hostname":"127.0.0.1","port":"XXXXX"}
+
+# 3. In a new terminal, run tests with that port:
+$env:TEST_PORT = "XXXXX"
+npx playwright test
+```
+
+### Architecture
+
+The app uses **server-authoritative game state**:
+
+- **Durable Objects** manage persistent game sessions
+- **WebSocket** for real-time state sync
+- **D1 Database** logs all moves for analysis
+- **Stockfish** runs client-side for AI computation
+- Game state survives page refresh
 
 ## Project Structure
 

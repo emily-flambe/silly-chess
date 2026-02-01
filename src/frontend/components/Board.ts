@@ -61,6 +61,9 @@ export class ChessBoard {
     this.container.innerHTML = '';
     this.boardElement = this.createBoardElement();
     this.container.appendChild(this.boardElement);
+    
+    // Parse and render the default starting position
+    this.parseFen(this.currentFen);
     this.render();
   }
 

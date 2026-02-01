@@ -26,10 +26,14 @@ const PIECE_VALUES: Record<PieceType, number> = {
   'k': 0, // King can't be captured
 };
 
+type PositionSelectCallback = (moveIndex: number) => void;
+
 export class MoveList {
   private container: HTMLElement;
   private listElement: HTMLElement;
   private moves: Move[] = [];
+  private positionSelectCallbacks: PositionSelectCallback[] = [];
+  private viewingMoveIndex: number = -1; // -1 = viewing current position
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -215,6 +219,11 @@ export class MoveList {
         background: rgba(130, 151, 105, 0.15);
       }
 
+      .move-viewing {
+        background: rgba(100, 149, 237, 0.3);
+        border-radius: 3px;
+      }
+
       .move-empty {
         color: #444;
       }
@@ -286,8 +295,12 @@ export class MoveList {
       return;
     }
 
+    // Reset viewing index when moves change (always show latest)
+    this.viewingMoveIndex = -1;
+
     let html = '';
     const totalMoves = this.sanMoves.length;
+    const viewingIndex = this.viewingMoveIndex === -1 ? totalMoves - 1 : this.viewingMoveIndex;
 
     // Group moves into pairs (white, black)
     for (let i = 0; i < this.sanMoves.length; i += 2) {
@@ -295,22 +308,122 @@ export class MoveList {
       const whiteMove = this.sanMoves[i];
       const blackMove = this.sanMoves[i + 1];
 
-      const isLatestWhite = i === totalMoves - 1;
-      const isLatestBlack = i + 1 === totalMoves - 1;
+      const isViewingWhite = i === viewingIndex;
+      const isViewingBlack = i + 1 === viewingIndex;
 
       html += `
         <div class="move-row">
           <span class="move-number">${moveNumber}.</span>
-          <span class="move-white ${isLatestWhite ? 'move-latest' : ''}">${whiteMove || ''}</span>
-          <span class="move-black ${isLatestBlack ? 'move-latest' : ''}">${blackMove || ''}</span>
+          <span class="move-white ${isViewingWhite ? 'move-viewing' : ''}" data-move-index="${i}">${whiteMove || ''}</span>
+          <span class="move-black ${isViewingBlack ? 'move-viewing' : ''}" ${blackMove ? `data-move-index="${i + 1}"` : ''}>${blackMove || ''}</span>
         </div>
       `;
     }
 
     content.innerHTML = html;
 
-    // Auto-scroll to bottom
-    content.scrollTop = content.scrollHeight;
+    // Add click handlers for move navigation
+    content.querySelectorAll('[data-move-index]').forEach(el => {
+      el.addEventListener('click', () => {
+        const index = parseInt(el.getAttribute('data-move-index') || '0', 10);
+        this.selectPosition(index);
+      });
+    });
+
+    // Auto-scroll to bottom if viewing latest
+    if (this.viewingMoveIndex === -1) {
+      content.scrollTop = content.scrollHeight;
+    }
+  }
+
+  /**
+   * Select a position to view (without undoing moves)
+   */
+  selectPosition(moveIndex: number): void {
+    const maxIndex = this.sanMoves.length - 1;
+    this.viewingMoveIndex = Math.max(-1, Math.min(moveIndex, maxIndex));
+    
+    // Update highlighting
+    this.updateViewingHighlight();
+    
+    // Notify listeners
+    this.positionSelectCallbacks.forEach(cb => cb(this.viewingMoveIndex));
+  }
+
+  /**
+   * Update the visual highlight for the currently viewed move
+   */
+  private updateViewingHighlight(): void {
+    const content = this.listElement.querySelector('.move-list-content');
+    if (!content) return;
+
+    // Remove all viewing highlights
+    content.querySelectorAll('.move-viewing').forEach(el => {
+      el.classList.remove('move-viewing');
+    });
+
+    // Add highlight to current viewing position
+    const viewingIndex = this.viewingMoveIndex === -1 ? this.sanMoves.length - 1 : this.viewingMoveIndex;
+    const viewingEl = content.querySelector(`[data-move-index="${viewingIndex}"]`);
+    if (viewingEl) {
+      viewingEl.classList.add('move-viewing');
+    }
+  }
+
+  /**
+   * Navigate to first position (before any moves)
+   */
+  goToStart(): void {
+    if (this.sanMoves.length === 0) return;
+    this.selectPosition(-1); // -1 represents start position
+    this.positionSelectCallbacks.forEach(cb => cb(-1));
+  }
+
+  /**
+   * Navigate to previous position
+   */
+  goBack(): void {
+    if (this.sanMoves.length === 0) return;
+    const current = this.viewingMoveIndex === -1 ? this.sanMoves.length - 1 : this.viewingMoveIndex;
+    this.selectPosition(current - 1);
+  }
+
+  /**
+   * Navigate to next position
+   */
+  goForward(): void {
+    if (this.viewingMoveIndex === -1) return; // Already at latest
+    this.selectPosition(this.viewingMoveIndex + 1);
+  }
+
+  /**
+   * Navigate to latest position
+   */
+  goToEnd(): void {
+    this.viewingMoveIndex = -1;
+    this.updateViewingHighlight();
+    this.positionSelectCallbacks.forEach(cb => cb(-1));
+  }
+
+  /**
+   * Check if currently viewing a historical position
+   */
+  isViewingHistory(): boolean {
+    return this.viewingMoveIndex !== -1 && this.viewingMoveIndex < this.sanMoves.length - 1;
+  }
+
+  /**
+   * Get the currently viewed move index (-1 = current position)
+   */
+  getViewingIndex(): number {
+    return this.viewingMoveIndex;
+  }
+
+  /**
+   * Register callback for position selection
+   */
+  onPositionSelect(callback: PositionSelectCallback): void {
+    this.positionSelectCallbacks.push(callback);
   }
 
   /**
