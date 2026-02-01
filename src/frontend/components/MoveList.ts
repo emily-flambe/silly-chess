@@ -251,7 +251,66 @@ export class MoveList {
    */
   clear(): void {
     this.moves = [];
+    this.sanMoves = [];
     this.render();
+  }
+
+  // Simple SAN storage for server mode
+  private sanMoves: string[] = [];
+
+  /**
+   * Update from SAN notation array (server mode)
+   */
+  updateFromSAN(sanMoves: string[]): void {
+    this.sanMoves = sanMoves;
+    // Clear Move objects - we'll render directly from SAN
+    this.moves = [];
+    this.renderFromSAN();
+  }
+
+  /**
+   * Render from SAN array (server mode)
+   */
+  private renderFromSAN(): void {
+    const content = this.listElement.querySelector('.move-list-content');
+    if (!content) return;
+
+    // Clear captured pieces in SAN mode (we don't have capture info)
+    const whiteCapturesContainer = this.listElement.querySelector('.captured-pieces[data-side="white"]');
+    const blackCapturesContainer = this.listElement.querySelector('.captured-pieces[data-side="black"]');
+    if (whiteCapturesContainer) whiteCapturesContainer.innerHTML = '';
+    if (blackCapturesContainer) blackCapturesContainer.innerHTML = '';
+
+    if (this.sanMoves.length === 0) {
+      content.innerHTML = '<div class="move-list-empty">No moves yet</div>';
+      return;
+    }
+
+    let html = '';
+    const totalMoves = this.sanMoves.length;
+
+    // Group moves into pairs (white, black)
+    for (let i = 0; i < this.sanMoves.length; i += 2) {
+      const moveNumber = Math.floor(i / 2) + 1;
+      const whiteMove = this.sanMoves[i];
+      const blackMove = this.sanMoves[i + 1];
+
+      const isLatestWhite = i === totalMoves - 1;
+      const isLatestBlack = i + 1 === totalMoves - 1;
+
+      html += `
+        <div class="move-row">
+          <span class="move-number">${moveNumber}.</span>
+          <span class="move-white ${isLatestWhite ? 'move-latest' : ''}">${whiteMove || ''}</span>
+          <span class="move-black ${isLatestBlack ? 'move-latest' : ''}">${blackMove || ''}</span>
+        </div>
+      `;
+    }
+
+    content.innerHTML = html;
+
+    // Auto-scroll to bottom
+    content.scrollTop = content.scrollHeight;
   }
 
   /**

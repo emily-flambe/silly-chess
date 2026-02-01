@@ -1,22 +1,23 @@
 /**
  * Silly Chess - Cloudflare Worker Entry Point
- * Chess application with Stockfish analysis and D1 database persistence
+ * Chess application with Durable Objects for game sessions and D1 persistence
  */
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { getCookie, setCookie } from 'hono/cookie';
-import type { Env, GameResult, CreateGameRequest, UpdateGameRequest, UserPreferences } from './types';
+import type { Env, GameResult, UpdateGameRequest, UserPreferences } from './types';
 import {
   createUser,
   getUser,
   updateUserPreferences,
-  createGame,
-  updateGame,
   getGame,
   listGames,
   endGame,
 } from './db/queries';
+
+// Re-export the Durable Object class
+export { ChessGame } from './durable-objects/ChessGame';
 
 // Create Hono app with typed bindings
 const app = new Hono<{ Bindings: Env }>();
@@ -140,7 +141,7 @@ app.put('/api/preferences', async (c) => {
 });
 
 // ============================================
-// Game Endpoints
+// Game Endpoints (Durable Object-based)
 // ============================================
 
 // List user's games
@@ -162,11 +163,14 @@ app.get('/api/games', async (c) => {
   }
 });
 
-// Create new game
+// Create new game via Durable Object
 app.post('/api/games', async (c) => {
   try {
     const userId = await getOrCreateUser(c);
-    const body = await c.req.json() as CreateGameRequest;
+    const body = await c.req.json() as { 
+      player_color?: 'white' | 'black';
+      ai_elo?: number;
+    };
 
     // Set user cookie
     setCookie(c, 'silly-chess-user', userId, {
@@ -178,21 +182,77 @@ app.post('/api/games', async (c) => {
     });
 
     const gameId = crypto.randomUUID();
-    const game = await createGame(c.env.DB, gameId, userId, body.opponent_elo);
+    const playerColor = body.player_color || 'white';
+    const aiElo = body.ai_elo || 1500;
 
-    return c.json(game, 201);
+    // Create Durable Object instance for this game
+    const doId = c.env.CHESS_GAME.idFromName(gameId);
+    const stub = c.env.CHESS_GAME.get(doId);
+
+    // Initialize the game in the DO
+    const response = await stub.fetch(new Request('https://do/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        gameId,
+        playerColor,
+        aiElo,
+        userId,
+      }),
+    }));
+
+    const result = await response.json() as Record<string, unknown>;
+
+    return c.json({ 
+      id: gameId,
+      player_color: playerColor,
+      ai_elo: aiElo,
+      ...result,
+    }, 201);
   } catch (error) {
     console.error('Error creating game:', error);
     return c.json({ error: 'Failed to create game' }, 500);
   }
 });
 
-// Get specific game
+// WebSocket connection to game
+app.get('/api/games/:id/ws', async (c) => {
+  const gameId = c.req.param('id');
+  
+  // Check for WebSocket upgrade
+  const upgradeHeader = c.req.header('Upgrade');
+  if (!upgradeHeader || upgradeHeader !== 'websocket') {
+    return c.json({ error: 'Expected WebSocket upgrade' }, 426);
+  }
+
+  // Get DO stub and forward the WebSocket request
+  const doId = c.env.CHESS_GAME.idFromName(gameId);
+  const stub = c.env.CHESS_GAME.get(doId);
+
+  // Forward the request to the DO
+  return stub.fetch(c.req.raw);
+});
+
+// Get game state from DO
 app.get('/api/games/:id', async (c) => {
   try {
     const gameId = c.req.param('id');
-    const game = await getGame(c.env.DB, gameId);
 
+    // First try to get from DO
+    const doId = c.env.CHESS_GAME.idFromName(gameId);
+    const stub = c.env.CHESS_GAME.get(doId);
+
+    const response = await stub.fetch(new Request('https://do/state', {
+      method: 'GET',
+    }));
+
+    if (response.ok) {
+      const state = await response.json();
+      return c.json(state);
+    }
+
+    // Fall back to D1 for historical games
+    const game = await getGame(c.env.DB, gameId);
     if (!game) {
       return c.json({ error: 'Game not found' }, 404);
     }
@@ -204,26 +264,77 @@ app.get('/api/games/:id', async (c) => {
   }
 });
 
-// Update game (save PGN progress)
-app.put('/api/games/:id', async (c) => {
+// Make a move via REST (alternative to WebSocket)
+app.post('/api/games/:id/move', async (c) => {
   try {
     const gameId = c.req.param('id');
-    const body = await c.req.json() as UpdateGameRequest;
+    const body = await c.req.json() as { from: string; to: string; promotion?: string };
 
-    const game = await updateGame(c.env.DB, gameId, body.pgn, body.result);
+    const doId = c.env.CHESS_GAME.idFromName(gameId);
+    const stub = c.env.CHESS_GAME.get(doId);
 
-    if (!game) {
-      return c.json({ error: 'Game not found' }, 404);
-    }
+    const response = await stub.fetch(new Request('https://do/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }));
 
-    return c.json(game);
+    const result = await response.json();
+    return c.json(result);
   } catch (error) {
-    console.error('Error updating game:', error);
-    return c.json({ error: 'Failed to update game' }, 500);
+    console.error('Error making move:', error);
+    return c.json({ error: 'Failed to make move' }, 500);
   }
 });
 
-// End game with result
+// Submit AI move (client-computed Stockfish move)
+app.post('/api/games/:id/ai-move', async (c) => {
+  try {
+    const gameId = c.req.param('id');
+    const body = await c.req.json() as { 
+      move: string; 
+      thinkingTime?: number;
+      evaluation?: number | string;
+    };
+
+    const doId = c.env.CHESS_GAME.idFromName(gameId);
+    const stub = c.env.CHESS_GAME.get(doId);
+
+    const response = await stub.fetch(new Request('https://do/ai-move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }));
+
+    const result = await response.json();
+    return c.json(result);
+  } catch (error) {
+    console.error('Error submitting AI move:', error);
+    return c.json({ error: 'Failed to submit AI move' }, 500);
+  }
+});
+
+// Resign game
+app.post('/api/games/:id/resign', async (c) => {
+  try {
+    const gameId = c.req.param('id');
+
+    const doId = c.env.CHESS_GAME.idFromName(gameId);
+    const stub = c.env.CHESS_GAME.get(doId);
+
+    const response = await stub.fetch(new Request('https://do/resign', {
+      method: 'POST',
+    }));
+
+    const result = await response.json();
+    return c.json(result);
+  } catch (error) {
+    console.error('Error resigning game:', error);
+    return c.json({ error: 'Failed to resign' }, 500);
+  }
+});
+
+// End game with result (legacy endpoint for compatibility)
 app.post('/api/games/:id/end', async (c) => {
   try {
     const gameId = c.req.param('id');

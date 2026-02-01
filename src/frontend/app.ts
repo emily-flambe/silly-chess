@@ -1,20 +1,28 @@
 /**
  * Silly Chess - Main Application
- * Wires together all components: Board, Controls, EvalBar, ChessEngine, Stockfish
+ * 
+ * Refactored for server-authoritative game state via Durable Objects.
+ * - Game state persists on server (survives refresh)
+ * - Moves validated server-side
+ * - All moves logged to D1
+ * - Stockfish still runs client-side for AI computation
  */
 
-import { ChessEngine } from '../lib/chess-engine';
 import { FairyStockfishClient } from '../lib/stockfish';
 import { ChessBoard } from './components/Board';
 import { GameControls } from './components/GameControls';
 import { EvalBar } from './components/EvalBar';
 import { MoveList } from './components/MoveList';
+import { GameClient, GameState, MoveResult, PlayerColor } from './GameClient';
 
-export interface GameState {
-  engine: ChessEngine;
-  playerColor: 'white' | 'black';
+interface AppState {
+  gameId: string | null;
+  playerColor: PlayerColor;
   isGameActive: boolean;
   isThinking: boolean;
+  fen: string;
+  turn: 'w' | 'b';
+  aiElo: number;
 }
 
 export class SillyChessApp {
@@ -23,13 +31,16 @@ export class SillyChessApp {
   private evalBar!: EvalBar;
   private moveList!: MoveList;
   private stockfish!: FairyStockfishClient;
-  private engine!: ChessEngine;
+  private gameClient!: GameClient;
 
-  private state: GameState = {
-    engine: null as unknown as ChessEngine,
+  private state: AppState = {
+    gameId: null,
     playerColor: 'white',
     isGameActive: false,
     isThinking: false,
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    turn: 'w',
+    aiElo: 1500,
   };
 
   private readonly containers: {
@@ -72,16 +83,15 @@ export class SillyChessApp {
   private async initialize(): Promise<void> {
     this.setStatus('Initializing...');
 
-    // Create chess engine
-    this.engine = new ChessEngine();
-    this.state.engine = this.engine;
+    // Create game client for server communication
+    this.gameClient = new GameClient();
+    this.setupGameClientHandlers();
 
-    // Create UI components
+    // Create UI components (board operates on FEN directly now)
     this.board = new ChessBoard(this.containers.board, {
       interactive: true,
       showCoordinates: true,
     });
-    this.board.setEngine(this.engine);
 
     this.controls = new GameControls(this.containers.controls);
     this.evalBar = new EvalBar(this.containers.evalBar);
@@ -90,7 +100,7 @@ export class SillyChessApp {
     // Set up event handlers
     this.setupEventHandlers();
 
-    // Initialize Fairy-Stockfish WASM client
+    // Initialize Fairy-Stockfish WASM client (still client-side)
     this.setStatus('Loading chess engine...');
     try {
       this.stockfish = new FairyStockfishClient();
@@ -99,13 +109,141 @@ export class SillyChessApp {
       // Set initial Elo from controls
       const slider = this.controls.getDifficultySlider();
       if (slider) {
-        await this.stockfish.setElo(slider.getElo());
+        this.state.aiElo = slider.getElo();
+        await this.stockfish.setElo(this.state.aiElo);
       }
+
+      // Check for existing game to reconnect
+      await this.checkForExistingGame();
 
       this.setStatus('Ready - Click "New Game" to start');
     } catch (error) {
       console.error('Failed to initialize Stockfish:', error);
       this.setStatus('Chess engine unavailable - AI opponent disabled');
+    }
+  }
+
+  /**
+   * Set up GameClient event handlers
+   */
+  private setupGameClientHandlers(): void {
+    // Handle game state updates from server
+    this.gameClient.on('game_state', (data) => {
+      const gameState = data as GameState;
+      this.syncFromServer(gameState);
+    });
+
+    // Handle move results
+    this.gameClient.on('move_result', (data) => {
+      const result = data as MoveResult;
+      this.handleMoveResult(result);
+    });
+
+    // Handle errors
+    this.gameClient.on('error', (data) => {
+      const error = data as { message: string };
+      console.error('Server error:', error.message);
+      this.setStatus(`Error: ${error.message}`);
+    });
+
+    // Handle connection lost
+    this.gameClient.on('connection_lost', () => {
+      this.setStatus('Connection lost. Please refresh the page.');
+    });
+  }
+
+  /**
+   * Sync local state from server
+   */
+  private syncFromServer(gameState: GameState): void {
+    this.state.gameId = gameState.gameId;
+    this.state.playerColor = gameState.playerColor;
+    this.state.fen = gameState.fen;
+    this.state.turn = gameState.turn;
+    this.state.isGameActive = gameState.status === 'active';
+
+    // Update board
+    this.board.setPosition(gameState.fen);
+    if (gameState.lastMove) {
+      this.board.setLastMove(gameState.lastMove.from, gameState.lastMove.to);
+    }
+
+    // Update move list
+    this.moveList.updateFromSAN(gameState.moveHistory);
+
+    // Handle game end
+    if (gameState.status !== 'active') {
+      this.handleGameEnd(gameState.status);
+    }
+
+    // Store game ID for reconnection
+    if (gameState.gameId) {
+      localStorage.setItem('silly-chess-game-id', gameState.gameId);
+    }
+  }
+
+  /**
+   * Handle move result from server
+   */
+  private handleMoveResult(result: MoveResult): void {
+    if (!result.success) {
+      return;
+    }
+
+    // Update local state
+    this.state.fen = result.fen;
+    this.state.turn = result.turn;
+
+    // Update board
+    this.board.setPosition(result.fen);
+    if (result.lastMove) {
+      this.board.setLastMove(result.lastMove.from, result.lastMove.to);
+    }
+
+    // Check game end
+    if (result.isCheckmate || result.isStalemate || result.isDraw) {
+      this.state.isGameActive = false;
+      
+      if (result.isCheckmate) {
+        const winner = result.turn === 'w' ? 'Black' : 'White';
+        this.handleGameEnd('checkmate', `${winner} wins!`);
+      } else if (result.isStalemate) {
+        this.handleGameEnd('stalemate');
+      } else {
+        this.handleGameEnd('draw');
+      }
+    }
+  }
+
+  /**
+   * Check for existing game to reconnect
+   */
+  private async checkForExistingGame(): Promise<void> {
+    const savedGameId = localStorage.getItem('silly-chess-game-id');
+    if (!savedGameId) return;
+
+    try {
+      const gameState = await this.gameClient.reconnectToGame(savedGameId);
+      
+      if (gameState.status === 'active') {
+        this.syncFromServer(gameState);
+        this.controls.setGameActive(true);
+        this.board.setInteractive(true);
+        
+        // Flip board if playing as black
+        if (gameState.playerColor === 'black') {
+          this.board.flip();
+        }
+
+        this.setStatus('Game restored - Your turn');
+        await this.updateEvaluation();
+      } else {
+        // Game ended, clear saved ID
+        localStorage.removeItem('silly-chess-game-id');
+      }
+    } catch (error) {
+      console.log('No existing game to restore');
+      localStorage.removeItem('silly-chess-game-id');
     }
   }
 
@@ -128,7 +266,8 @@ export class SillyChessApp {
     });
 
     this.controls.onUndo(() => {
-      this.handleUndo();
+      // Undo is more complex with server state - disable for now
+      this.setStatus('Undo not available in online mode');
     });
 
     this.controls.onHint(() => {
@@ -138,10 +277,10 @@ export class SillyChessApp {
     // Difficulty slider change
     const slider = this.controls.getDifficultySlider();
     if (slider) {
-      // Set initial difficulty display
       this.updateDifficultyDisplay(slider.getElo());
 
       slider.onChange(async (elo) => {
+        this.state.aiElo = elo;
         this.updateDifficultyDisplay(elo);
         if (this.stockfish?.isReady()) {
           await this.stockfish.setElo(elo);
@@ -177,43 +316,61 @@ export class SillyChessApp {
   /**
    * Start a new game
    */
-  private async startNewGame(playerColor: 'white' | 'black'): Promise<void> {
-    // Stop any pending analysis from previous game to avoid stale eval values
+  private async startNewGame(playerColor: PlayerColor): Promise<void> {
+    // Stop any pending analysis
     if (this.stockfish?.isReady()) {
       await this.stockfish.stop();
     }
 
-    // Reset engine and clear board highlights
-    this.engine.reset();
+    // Clear local state
     this.board.clearHint();
     this.board.clearLastMove();
     this.moveList.clear();
-
-    // Update state
-    this.state.playerColor = playerColor;
-    this.state.isGameActive = true;
-    this.state.isThinking = false;
-
-    // Update UI
-    this.controls.setGameActive(true);
-    this.controls.setCanUndo(false);
-    this.board.setInteractive(true);
     this.evalBar.reset();
 
-    // Flip board if playing as black
-    if (playerColor === 'black') {
-      this.board.flip();
+    this.setStatus('Creating game...');
+
+    try {
+      // Create game on server
+      const { gameId, gameState } = await this.gameClient.createGame(playerColor, this.state.aiElo);
+
+      // Update local state
+      this.state.gameId = gameId;
+      this.state.playerColor = playerColor;
+      this.state.isGameActive = true;
+      this.state.isThinking = false;
+      this.state.fen = gameState.fen;
+      this.state.turn = gameState.turn;
+
+      // Save for reconnection
+      localStorage.setItem('silly-chess-game-id', gameId);
+
+      // Update UI
+      this.controls.setGameActive(true);
+      this.controls.setCanUndo(false);
+      this.board.setInteractive(true);
+      this.board.setPosition(gameState.fen);
+
+      // Flip board if playing as black
+      if (playerColor === 'black') {
+        this.board.flip();
+      } else {
+        this.board.unflip();
+      }
+
+      this.setStatus(`Game started - You play as ${playerColor}`);
+
+      // If playing as black, let AI make first move
+      if (playerColor === 'black') {
+        await this.makeAIMove();
+      }
+
+      // Run initial evaluation
+      await this.updateEvaluation();
+    } catch (error) {
+      console.error('Failed to create game:', error);
+      this.setStatus('Failed to create game');
     }
-
-    this.setStatus(`Game started - You play as ${playerColor}`);
-
-    // If playing as black, let AI make first move
-    if (playerColor === 'black') {
-      await this.makeAIMove();
-    }
-
-    // Run initial evaluation
-    await this.updateEvaluation();
   }
 
   /**
@@ -225,38 +382,51 @@ export class SillyChessApp {
     }
 
     // Check if it's player's turn
-    const turn = this.engine.getStatus().turn;
-    if (turn !== this.state.playerColor) {
+    const currentTurn = this.state.turn === 'w' ? 'white' : 'black';
+    if (currentTurn !== this.state.playerColor) {
       return;
     }
 
-    // Clear any hint highlight when player makes a move
+    // Clear hint
     this.board.clearHint();
 
-    // Try to make the move
-    const move = this.engine.move(from, to);
-    if (!move) {
-      return; // Invalid move
+    this.setStatus('Making move...');
+
+    try {
+      // Send move to server
+      const result = await this.gameClient.makeMove(from, to);
+
+      if (!result.success) {
+        this.setStatus('Invalid move');
+        return;
+      }
+
+      // Update local state
+      this.state.fen = result.fen;
+      this.state.turn = result.turn;
+
+      // Update board
+      this.board.setPosition(result.fen);
+      if (result.lastMove) {
+        this.board.setLastMove(result.lastMove.from, result.lastMove.to);
+      }
+
+      // Check game end
+      if (result.isCheckmate || result.isStalemate || result.isDraw) {
+        return; // Game end handled in handleMoveResult
+      }
+
+      // Update evaluation and make AI move
+      await this.updateEvaluation();
+      await this.makeAIMove();
+    } catch (error) {
+      console.error('Move failed:', error);
+      this.setStatus('Move failed - try again');
     }
-
-    // Update move list
-    this.moveList.update(this.engine.getState().moveHistory);
-
-    // Update can undo state
-    this.controls.setCanUndo(true);
-
-    // Check game end conditions
-    if (this.checkGameEnd()) {
-      return;
-    }
-
-    // Update evaluation and make AI move
-    await this.updateEvaluation();
-    await this.makeAIMove();
   }
 
   /**
-   * Make AI move using Chess API
+   * Make AI move using Stockfish (client-side) and submit to server
    */
   private async makeAIMove(): Promise<void> {
     if (!this.state.isGameActive || !this.stockfish?.isReady()) {
@@ -267,24 +437,43 @@ export class SillyChessApp {
     this.board.setInteractive(false);
     this.setStatus('AI is thinking...');
 
+    const startTime = Date.now();
+
     try {
-      const fen = this.engine.getFEN();
+      // Get best move from Stockfish
+      const bestMove = await this.stockfish.getBestMove(this.state.fen);
 
-      const bestMove = await this.stockfish.getBestMove(fen);
+      if (!bestMove || !this.state.isGameActive) {
+        return;
+      }
 
-      if (bestMove && this.state.isGameActive) {
-        // Parse UCI move format (e.g., "e2e4" or "e7e8q" for promotion)
-        const from = bestMove.substring(0, 2);
-        const to = bestMove.substring(2, 4);
-        const promotion = bestMove.length > 4 ? bestMove[4] : undefined;
+      const thinkingTime = Date.now() - startTime;
 
-        this.engine.move(from, to, promotion);
-        this.board.update(); // Re-render board with AI's move
-        this.moveList.update(this.engine.getState().moveHistory);
-        this.controls.setCanUndo(true);
+      // Get evaluation for logging
+      let evaluation: number | string | undefined;
+      try {
+        const analysis = await this.stockfish.analyze(this.state.fen, { depth: 12 });
+        evaluation = analysis.evaluation;
+      } catch {
+        // Evaluation optional
+      }
 
-        // Check game end conditions
-        if (this.checkGameEnd()) {
+      // Submit AI move to server
+      const result = await this.gameClient.submitAIMove(bestMove, thinkingTime, evaluation);
+
+      if (result.success) {
+        // Update local state
+        this.state.fen = result.fen;
+        this.state.turn = result.turn;
+
+        // Update board
+        this.board.setPosition(result.fen);
+        if (result.lastMove) {
+          this.board.setLastMove(result.lastMove.from, result.lastMove.to);
+        }
+
+        // Check game end
+        if (result.isCheckmate || result.isStalemate || result.isDraw) {
           return;
         }
 
@@ -311,12 +500,11 @@ export class SillyChessApp {
     }
 
     try {
-      const fen = this.engine.getFEN();
-      const analysis = await this.stockfish.analyze(fen, { depth: 12 });
+      const analysis = await this.stockfish.analyze(this.state.fen, { depth: 12 });
 
-      // Stockfish returns evaluation from the side-to-move's perspective
-      // We need to convert to white's perspective (positive = white advantage)
-      const isBlackToMove = this.engine.getStatus().turn === 'black';
+      // Stockfish returns evaluation from side-to-move's perspective
+      // Convert to white's perspective (positive = white advantage)
+      const isBlackToMove = this.state.turn === 'b';
 
       if (typeof analysis.evaluation === 'string') {
         // Mate score
@@ -324,12 +512,11 @@ export class SillyChessApp {
         if (mateMatch) {
           const moves = parseInt(mateMatch[1], 10);
           let isNegative = analysis.evaluation.startsWith('-');
-          // Flip sign if it's black's turn (convert to white's perspective)
           if (isBlackToMove) isNegative = !isNegative;
           this.evalBar.setMate(isNegative ? -moves : moves);
         }
       } else {
-        // Centipawn score - flip sign if black to move
+        // Centipawn score
         const evalFromWhitePerspective = isBlackToMove
           ? -analysis.evaluation
           : analysis.evaluation;
@@ -341,54 +528,55 @@ export class SillyChessApp {
   }
 
   /**
-   * Check if game has ended
+   * Handle game end
    */
-  private checkGameEnd(): boolean {
-    const status = this.engine.getStatus();
-
-    if (status.isCheckmate) {
-      const winner = status.turn === 'white' ? 'Black' : 'White';
-      this.endGame(`Checkmate! ${winner} wins.`);
-      return true;
-    }
-
-    if (status.isStalemate) {
-      this.endGame('Stalemate! Game is a draw.');
-      return true;
-    }
-
-    if (status.isDraw) {
-      this.endGame('Game is a draw.');
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * End the current game
-   */
-  private endGame(message: string): void {
+  private handleGameEnd(status: string, extraMessage?: string): void {
     this.state.isGameActive = false;
     this.state.isThinking = false;
     this.board.setInteractive(false);
     this.controls.setGameActive(false);
+
+    // Clear saved game
+    localStorage.removeItem('silly-chess-game-id');
+
+    let message = '';
+    switch (status) {
+      case 'checkmate':
+        message = extraMessage || 'Checkmate!';
+        break;
+      case 'stalemate':
+        message = 'Stalemate! Game is a draw.';
+        break;
+      case 'draw':
+        message = 'Game is a draw.';
+        break;
+      case 'resigned':
+        message = 'Game resigned.';
+        break;
+      default:
+        message = 'Game over.';
+    }
+
     this.setStatus(message);
   }
 
   /**
    * Handle resign
    */
-  private handleResign(): void {
+  private async handleResign(): Promise<void> {
     if (!this.state.isGameActive) {
       return;
     }
 
-    const winner = this.state.playerColor === 'white' ? 'Black' : 'White';
-    this.endGame(`You resigned. ${winner} wins.`);
+    try {
+      await this.gameClient.resign();
+      const winner = this.state.playerColor === 'white' ? 'Black' : 'White';
+      this.handleGameEnd('resigned', `You resigned. ${winner} wins.`);
+    } catch (error) {
+      console.error('Resign failed:', error);
+    }
 
-    // Reset board to starting position and clear highlights
-    this.engine.reset();
+    // Reset board display
     this.board.clearLastMove();
     this.moveList.clear();
     this.evalBar.reset();
@@ -402,23 +590,20 @@ export class SillyChessApp {
       return;
     }
 
-    // Check if it's player's turn
-    const turn = this.engine.getStatus().turn;
-    if (turn !== this.state.playerColor) {
+    const currentTurn = this.state.turn === 'w' ? 'white' : 'black';
+    if (currentTurn !== this.state.playerColor) {
       return;
     }
 
     this.setStatus('Calculating best move...');
 
     try {
-      const fen = this.engine.getFEN();
-      const bestMove = await this.stockfish.getBestMove(fen);
+      const bestMove = await this.stockfish.getBestMove(this.state.fen);
 
       if (bestMove && this.state.isGameActive) {
         const from = bestMove.substring(0, 2);
         const to = bestMove.substring(2, 4);
 
-        // Clear any previous hint and show the new one
         this.board.clearHint();
         this.board.showHint(from, to);
 
@@ -428,35 +613,6 @@ export class SillyChessApp {
       console.error('Hint error:', error);
       this.setStatus('Could not calculate hint');
     }
-  }
-
-  /**
-   * Handle undo (takes back last move pair)
-   */
-  private handleUndo(): void {
-    if (!this.state.isGameActive || this.state.isThinking) {
-      return;
-    }
-
-    // Undo AI's move
-    this.engine.undo();
-    // Undo player's move
-    this.engine.undo();
-
-    // Update the board visually
-    this.board.update();
-    this.board.clearLastMove();
-    this.board.clearHint();
-
-    // Update move list
-    this.moveList.update(this.engine.getState().moveHistory);
-
-    // Check if more moves can be undone
-    const history = this.engine.getState().moveHistory;
-    this.controls.setCanUndo(history.length >= 2);
-
-    this.setStatus('Moves undone - Your turn');
-    this.updateEvaluation();
   }
 
   /**
@@ -472,6 +628,9 @@ export class SillyChessApp {
   public destroy(): void {
     if (this.stockfish) {
       this.stockfish.terminate();
+    }
+    if (this.gameClient) {
+      this.gameClient.disconnect();
     }
     if (this.board) {
       this.board.destroy();

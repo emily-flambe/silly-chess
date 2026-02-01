@@ -3,10 +3,11 @@
  *
  * Interactive chess board with piece movement support.
  * Supports click-to-move and displays legal moves.
+ * Can operate with ChessEngine (legacy) or FEN-based positioning (server mode).
  */
 
 import type { ChessEngine } from '../../lib/chess-engine';
-import type { Square, Color } from '../../types';
+import type { Color } from '../../types';
 
 export interface BoardOptions {
   flipped?: boolean;
@@ -26,6 +27,12 @@ const PIECE_SYMBOLS: Record<string, string> = {
   'P': '\u265F', // Pawn (filled)
 };
 
+// Piece info parsed from FEN
+interface PieceInfo {
+  piece: string;
+  color: Color;
+}
+
 export class ChessBoard {
   private container: HTMLElement;
   private boardElement: HTMLElement;
@@ -36,6 +43,11 @@ export class ChessBoard {
   private lastMove: { from: string; to: string } | null = null;
   private moveCallbacks: MoveCallback[] = [];
   private highlightedSquares: Map<string, string> = new Map();
+  
+  // FEN-based state (for server-authoritative mode)
+  private currentFen: string = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  private fenPieces: Map<string, PieceInfo> = new Map();
+  private fenTurn: Color = 'white';
 
   constructor(container: HTMLElement, options: BoardOptions = {}) {
     this.container = container;
@@ -141,7 +153,11 @@ export class ChessBoard {
    * Handle square click
    */
   private handleSquareClick(square: string): void {
-    if (!this.options.interactive || !this.engine) return;
+    if (!this.options.interactive) return;
+    
+    // In FEN mode (no engine), allow piece selection and move attempts
+    const hasPieces = this.engine || this.fenPieces.size > 0;
+    if (!hasPieces) return;
 
     // If no square selected, try to select this square
     if (!this.selectedSquare) {
@@ -150,8 +166,11 @@ export class ChessBoard {
       // If clicking the same square, deselect it
       if (this.selectedSquare === square) {
         this.deselectSquare();
-      } else if (this.legalMoves.includes(square)) {
-        // If clicking a legal move, make the move
+      } else if (this.engine && this.legalMoves.includes(square)) {
+        // If we have engine and this is a legal move, make the move
+        this.makeMove(this.selectedSquare, square);
+      } else if (!this.engine) {
+        // In FEN mode, always attempt the move (server validates)
         this.makeMove(this.selectedSquare, square);
       } else {
         // Otherwise, try to select the new square
@@ -165,13 +184,21 @@ export class ChessBoard {
    * Select a square and show legal moves
    */
   private selectSquare(square: string): void {
-    if (!this.engine) return;
+    // Check if there's a piece on this square
+    const piece = this.getPieceAt(square);
+    if (!piece) return;
 
-    const moves = this.engine.getLegalMoves(square);
-    if (moves.length === 0) return;
+    // If we have engine, use it for legal moves
+    if (this.engine) {
+      const moves = this.engine.getLegalMoves(square);
+      if (moves.length === 0) return;
+      this.legalMoves = moves.map(m => m.to);
+    } else {
+      // In FEN mode, we don't know legal moves - server validates
+      this.legalMoves = [];
+    }
 
     this.selectedSquare = square;
-    this.legalMoves = moves.map(m => m.to);
 
     // Highlight selected square
     const squareElement = this.getSquareElement(square);
@@ -179,18 +206,20 @@ export class ChessBoard {
       squareElement.classList.add('selected');
     }
 
-    // Show legal move indicators
-    this.legalMoves.forEach(move => {
-      const targetSquare = this.getSquareElement(move);
-      if (targetSquare) {
-        const piece = this.getPieceAt(move);
-        if (piece) {
-          targetSquare.classList.add('legal-capture');
-        } else {
-          targetSquare.classList.add('legal-move');
+    // Show legal move indicators (only if we have engine)
+    if (this.engine) {
+      this.legalMoves.forEach(move => {
+        const targetSquare = this.getSquareElement(move);
+        if (targetSquare) {
+          const targetPiece = this.getPieceAt(move);
+          if (targetPiece) {
+            targetSquare.classList.add('legal-capture');
+          } else {
+            targetSquare.classList.add('legal-move');
+          }
         }
-      }
-    });
+      });
+    }
   }
 
   /**
@@ -239,32 +268,32 @@ export class ChessBoard {
   }
 
   /**
-   * Get piece at square from engine
+   * Get piece at square from engine or FEN state
    */
   private getPieceAt(square: string): { piece: string; color: Color } | null {
-    if (!this.engine) return null;
-
-    const state = this.engine.getState();
-    return state.pieces.get(square) || null;
+    if (this.engine) {
+      const state = this.engine.getState();
+      return state.pieces.get(square) || null;
+    }
+    
+    // FEN-based mode
+    return this.fenPieces.get(square) || null;
   }
 
   /**
-   * Render the board based on current engine state
+   * Render the board based on current engine state or FEN
    */
   private render(): void {
-    if (!this.engine) {
-      this.clearBoard();
-      return;
-    }
-
-    const state = this.engine.getState();
-    const status = this.engine.getStatus();
-
-    // Clear all pieces
+    // Clear all pieces and highlights
     this.clearBoard();
 
+    // Get pieces from engine or FEN state
+    const pieces = this.engine 
+      ? this.engine.getState().pieces 
+      : this.fenPieces;
+
     // Place pieces
-    state.pieces.forEach((pieceInfo, square) => {
+    pieces.forEach((pieceInfo, square) => {
       const squareElement = this.getSquareElement(square);
       if (squareElement) {
         const pieceElement = document.createElement('div');
@@ -283,13 +312,17 @@ export class ChessBoard {
       if (toSquare) toSquare.classList.add('last-move');
     }
 
-    // Highlight check
-    if (status.isCheck) {
-      const kingSquare = this.findKingSquare(state.turn);
-      if (kingSquare) {
-        const squareElement = this.getSquareElement(kingSquare);
-        if (squareElement) {
-          squareElement.classList.add('in-check');
+    // Highlight check (only if we have engine with status)
+    if (this.engine) {
+      const status = this.engine.getStatus();
+      if (status.isCheck) {
+        const state = this.engine.getState();
+        const kingSquare = this.findKingSquare(state.turn);
+        if (kingSquare) {
+          const squareElement = this.getSquareElement(kingSquare);
+          if (squareElement) {
+            squareElement.classList.add('in-check');
+          }
         }
       }
     }
@@ -333,16 +366,75 @@ export class ChessBoard {
   }
 
   /**
+   * Parse FEN string and update internal piece map
+   */
+  private parseFen(fen: string): void {
+    this.currentFen = fen;
+    this.fenPieces.clear();
+
+    const parts = fen.split(' ');
+    const position = parts[0];
+    const turn = parts[1] || 'w';
+
+    this.fenTurn = turn === 'w' ? 'white' : 'black';
+
+    const ranks = position.split('/');
+    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+    ranks.forEach((rank, rankIndex) => {
+      const actualRank = 8 - rankIndex;
+      let fileIndex = 0;
+
+      for (const char of rank) {
+        if (char >= '1' && char <= '8') {
+          fileIndex += parseInt(char, 10);
+        } else {
+          const square = files[fileIndex] + actualRank;
+          const isWhite = char === char.toUpperCase();
+          const piece = char.toLowerCase();
+
+          this.fenPieces.set(square, {
+            piece,
+            color: isWhite ? 'white' : 'black',
+          });
+
+          fileIndex++;
+        }
+      }
+    });
+  }
+
+  /**
    * Set the position from a FEN string or ChessEngine instance
    */
   setPosition(engineOrFen: ChessEngine | string): void {
     if (typeof engineOrFen === 'string') {
-      // If FEN string, engine should already be set externally
-      // This is a simplified implementation - in real use, you'd pass the engine separately
-      throw new Error('setPosition requires ChessEngine instance. Use setEngine() first.');
+      // FEN string mode - parse and render
+      this.parseFen(engineOrFen);
+      this.engine = null; // Clear engine reference in FEN mode
+      this.render();
     } else {
+      // ChessEngine mode (legacy)
       this.engine = engineOrFen;
       this.render();
+    }
+  }
+
+  /**
+   * Set the last move highlight
+   */
+  setLastMove(from: string, to: string): void {
+    this.lastMove = { from, to };
+    this.render();
+  }
+
+  /**
+   * Unflip the board (set to white's perspective)
+   */
+  unflip(): void {
+    if (this.options.flipped) {
+      this.options.flipped = false;
+      this.boardElement.classList.remove('flipped');
     }
   }
 
