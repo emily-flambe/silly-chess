@@ -291,13 +291,16 @@ export class SillyChessApp {
    * Check for existing game to reconnect
    */
   private async checkForExistingGame(): Promise<void> {
-    // Priority: URL > localStorage
+    // Only restore if URL has a game ID - don't auto-redirect from homepage
     const urlGameId = this.getGameIdFromUrl();
-    const savedGameId = urlGameId || localStorage.getItem('silly-chess-game-id');
-    if (!savedGameId) return;
+    if (!urlGameId) {
+      // On homepage, clear any stale localStorage
+      localStorage.removeItem('silly-chess-game-id');
+      return;
+    }
 
     try {
-      const gameState = await this.gameClient.reconnectToGame(savedGameId);
+      const gameState = await this.gameClient.reconnectToGame(urlGameId);
       
       if (gameState.status === 'active') {
         this.syncFromServer(gameState);
@@ -309,13 +312,10 @@ export class SillyChessApp {
           this.board.flip();
         }
 
-        // Update URL if we loaded from localStorage
-        this.updateUrlForGame(savedGameId);
-
         this.setStatus('Game restored - Your turn');
         await this.updateEvaluation();
       } else {
-        // Game ended, clear saved ID and URL
+        // Game ended, redirect to homepage
         localStorage.removeItem('silly-chess-game-id');
         this.clearGameUrl();
       }
