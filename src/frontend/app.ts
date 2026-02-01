@@ -599,19 +599,17 @@ export class SillyChessApp {
       const result = await this.gameClient.submitAIMove(bestMove, thinkingTime, evaluation);
 
       if (result.success) {
-        // Only update state if event handler hasn't already (avoid duplicates)
+        // Track SAN move ALWAYS (before FEN guard, since event handler may have already updated FEN)
+        if (result.san) {
+          this.state.sanMoves.push(result.san);
+          this.moveList.updateFromSAN(this.state.sanMoves);
+        }
+
+        // Only update other state if event handler hasn't already (avoid duplicates)
         if (this.state.fen !== result.fen) {
           this.state.fen = result.fen;
           this.state.turn = result.turn;
           this.state.fenHistory.push(result.fen);
-          
-          // Track SAN move and update move list
-          if (result.san) {
-            this.state.sanMoves.push(result.san);
-            this.moveList.updateFromSAN(this.state.sanMoves);
-          }
-
-          // Update board
           this.board.setPosition(result.fen);
         }
         
