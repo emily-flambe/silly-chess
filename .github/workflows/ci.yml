@@ -28,6 +28,11 @@ jobs:
       - name: Build
         run: npm run build
       
+      - name: Initialize local D1 database
+        run: |
+          npx wrangler d1 execute silly-chess-db --local --file=./src/db/schema.sql
+          npx wrangler d1 execute silly-chess-db --local --file=./migrations/0001_add_durable_objects.sql
+      
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       
