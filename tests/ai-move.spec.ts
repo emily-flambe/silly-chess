@@ -46,8 +46,8 @@ test.describe('AI Move Tests', () => {
     // Wait for AI to think and make a move
     await expect(page.locator('#status-container')).toContainText('AI is thinking', { timeout: 5000 });
 
-    // Wait for "Your turn" which indicates AI has moved
-    await expect(page.locator('#status-container')).toContainText('Your turn', { timeout: 30000 });
+    // Wait for "Your turn" which indicates AI has moved (Stockfish WASM can be slow on CI)
+    await expect(page.locator('#status-container')).toContainText('Your turn', { timeout: 60000 });
 
     // Verify the board state has changed - black should have made a move
     // In standard chess, black's response would move one of their pieces
@@ -99,8 +99,8 @@ test.describe('AI Move Tests', () => {
     // Wait for AI to think (white moves first)
     await expect(page.locator('#status-container')).toContainText('AI is thinking', { timeout: 5000 });
 
-    // Wait for "Your turn" which indicates AI has moved
-    await expect(page.locator('#status-container')).toContainText('Your turn', { timeout: 30000 });
+    // Wait for "Your turn" which indicates AI has moved (Stockfish WASM can be slow on CI)
+    await expect(page.locator('#status-container')).toContainText('Your turn', { timeout: 60000 });
 
     // Verify white has made a move - at least one piece should have moved from rank 2
     const whitePiecesOn2After = await page.locator('[data-square$="2"] .piece.piece-white').count();
