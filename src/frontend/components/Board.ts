@@ -6,6 +6,7 @@
  * Can operate with ChessEngine (legacy) or FEN-based positioning (server mode).
  */
 
+import { Chess } from 'chess.js';
 import type { ChessEngine } from '../../lib/chess-engine';
 import type { Color } from '../../types';
 
@@ -197,8 +198,15 @@ export class ChessBoard {
       if (moves.length === 0) return;
       this.legalMoves = moves.map(m => m.to);
     } else {
-      // In FEN mode, we don't know legal moves - server validates
-      this.legalMoves = [];
+      // In FEN mode, compute legal moves using chess.js
+      try {
+        const chess = new Chess(this.currentFen);
+        const moves = chess.moves({ square: square as any, verbose: true });
+        if (moves.length === 0) return;
+        this.legalMoves = moves.map(m => m.to);
+      } catch {
+        this.legalMoves = [];
+      }
     }
 
     this.selectedSquare = square;
@@ -209,20 +217,18 @@ export class ChessBoard {
       squareElement.classList.add('selected');
     }
 
-    // Show legal move indicators (only if we have engine)
-    if (this.engine) {
-      this.legalMoves.forEach(move => {
-        const targetSquare = this.getSquareElement(move);
-        if (targetSquare) {
-          const targetPiece = this.getPieceAt(move);
-          if (targetPiece) {
-            targetSquare.classList.add('legal-capture');
-          } else {
-            targetSquare.classList.add('legal-move');
-          }
+    // Show legal move indicators
+    this.legalMoves.forEach(move => {
+      const targetSquare = this.getSquareElement(move);
+      if (targetSquare) {
+        const targetPiece = this.getPieceAt(move);
+        if (targetPiece) {
+          targetSquare.classList.add('legal-capture');
+        } else {
+          targetSquare.classList.add('legal-move');
         }
-      });
-    }
+      }
+    });
   }
 
   /**
