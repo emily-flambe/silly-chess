@@ -261,10 +261,39 @@ export class SillyChessApp {
   }
 
   /**
+   * Get game ID from URL if present (/game/:id)
+   */
+  private getGameIdFromUrl(): string | null {
+    const match = window.location.pathname.match(/^\/game\/([a-f0-9-]+)$/i);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Update URL to reflect current game
+   */
+  private updateUrlForGame(gameId: string): void {
+    const newUrl = `/game/${gameId}`;
+    if (window.location.pathname !== newUrl) {
+      history.pushState({ gameId }, '', newUrl);
+    }
+  }
+
+  /**
+   * Clear game from URL (go back to home)
+   */
+  private clearGameUrl(): void {
+    if (window.location.pathname !== '/') {
+      history.pushState({}, '', '/');
+    }
+  }
+
+  /**
    * Check for existing game to reconnect
    */
   private async checkForExistingGame(): Promise<void> {
-    const savedGameId = localStorage.getItem('silly-chess-game-id');
+    // Priority: URL > localStorage
+    const urlGameId = this.getGameIdFromUrl();
+    const savedGameId = urlGameId || localStorage.getItem('silly-chess-game-id');
     if (!savedGameId) return;
 
     try {
@@ -280,15 +309,20 @@ export class SillyChessApp {
           this.board.flip();
         }
 
+        // Update URL if we loaded from localStorage
+        this.updateUrlForGame(savedGameId);
+
         this.setStatus('Game restored - Your turn');
         await this.updateEvaluation();
       } else {
-        // Game ended, clear saved ID
+        // Game ended, clear saved ID and URL
         localStorage.removeItem('silly-chess-game-id');
+        this.clearGameUrl();
       }
     } catch (error) {
       console.log('No existing game to restore');
       localStorage.removeItem('silly-chess-game-id');
+      this.clearGameUrl();
     }
   }
 
@@ -420,8 +454,9 @@ export class SillyChessApp {
       this.state.fenHistory = []; // Reset history for new game
       this.state.viewingHistoryIndex = -1;
 
-      // Save for reconnection
+      // Save for reconnection and update URL
       localStorage.setItem('silly-chess-game-id', gameId);
+      this.updateUrlForGame(gameId);
 
       // Update UI
       this.controls.setGameActive(true);
@@ -622,7 +657,7 @@ export class SillyChessApp {
     this.board.setInteractive(false);
     this.controls.setGameActive(false);
 
-    // Clear saved game
+    // Clear saved game (keep URL so game can still be viewed)
     localStorage.removeItem('silly-chess-game-id');
 
     let message = '';
