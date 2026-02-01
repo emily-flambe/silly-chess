@@ -94,20 +94,27 @@ body {
 .square.legal-move::after {
   content: '';
   position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: 25%;
   height: 25%;
   border-radius: 50%;
-  background-color: rgba(0, 0, 0, 0.15);
+  background-color: rgba(0, 0, 0, 0.2);
   pointer-events: none;
 }
 
 .square.legal-capture::after {
   content: '';
   position: absolute;
-  width: 85%;
-  height: 85%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  height: 90%;
   border-radius: 50%;
-  border: 4px solid rgba(0, 0, 0, 0.15);
+  border: 5px solid rgba(0, 0, 0, 0.2);
+  box-sizing: border-box;
   pointer-events: none;
 }
 
