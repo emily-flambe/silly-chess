@@ -24,6 +24,7 @@ interface AppState {
   turn: 'w' | 'b';
   aiElo: number;
   fenHistory: string[]; // FEN after each move (index 0 = after first move)
+  sanMoves: string[]; // SAN notation moves for display
   viewingHistoryIndex: number; // -1 = current position, 0+ = viewing historical position
 }
 
@@ -46,6 +47,7 @@ export class SillyChessApp {
     turn: 'w',
     aiElo: 1500,
     fenHistory: [],
+    sanMoves: [],
     viewingHistoryIndex: -1, // -1 means viewing current position
   };
 
@@ -172,6 +174,7 @@ export class SillyChessApp {
     // Note: FEN history isn't available from server sync - would need to replay moves
     // For reconnected games, history navigation won't work until new moves are made
     this.state.fenHistory = [];
+    this.state.sanMoves = gameState.moveHistory || [];
 
     // Update board
     this.board.setPosition(gameState.fen);
@@ -180,7 +183,7 @@ export class SillyChessApp {
     }
 
     // Update move list
-    this.moveList.updateFromSAN(gameState.moveHistory);
+    this.moveList.updateFromSAN(this.state.sanMoves);
 
     // Handle game end
     if (gameState.status !== 'active') {
@@ -452,6 +455,7 @@ export class SillyChessApp {
       this.state.fen = gameState.fen;
       this.state.turn = gameState.turn;
       this.state.fenHistory = []; // Reset history for new game
+      this.state.sanMoves = []; // Reset move list for new game
       this.state.viewingHistoryIndex = -1;
 
       // Save for reconnection and update URL
@@ -524,6 +528,12 @@ export class SillyChessApp {
       this.state.fen = result.fen;
       this.state.turn = result.turn;
       this.state.fenHistory.push(result.fen); // Track position history
+      
+      // Track SAN move and update move list
+      if (result.san) {
+        this.state.sanMoves.push(result.san);
+        this.moveList.updateFromSAN(this.state.sanMoves);
+      }
 
       // Update board
       this.board.setPosition(result.fen);
@@ -586,6 +596,12 @@ export class SillyChessApp {
         this.state.fen = result.fen;
         this.state.turn = result.turn;
         this.state.fenHistory.push(result.fen); // Track position history
+        
+        // Track SAN move and update move list
+        if (result.san) {
+          this.state.sanMoves.push(result.san);
+          this.moveList.updateFromSAN(this.state.sanMoves);
+        }
 
         // Update board
         this.board.setPosition(result.fen);

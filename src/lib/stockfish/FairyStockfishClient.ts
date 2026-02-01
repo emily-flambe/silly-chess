@@ -107,6 +107,18 @@ export class FairyStockfishClient {
         }
       }
     });
+    
+    // Handle worker errors during gameplay (not just initialization)
+    this.worker.addEventListener('error', (error: ErrorEvent) => {
+      console.error('Stockfish worker error:', error.message);
+      if (this.pendingReject) {
+        this.pendingReject(new Error(`Stockfish worker error: ${error.message}`));
+        this.pendingResolve = null;
+        this.pendingReject = null;
+      }
+      // Mark as not initialized to prevent further use
+      this.isInitialized = false;
+    });
   }
 
   /**
@@ -170,13 +182,14 @@ export class FairyStockfishClient {
 
   /**
    * Get search depth for move calculation
-   * Uses consistent depth - UCI_LimitStrength handles difficulty scaling
+   * Uses moderate depth - UCI_LimitStrength handles difficulty scaling
+   * Lower depth prevents WASM timeouts on complex positions
    */
   private getDepthForElo(): number {
-    // Use a reasonable depth for all levels
+    // Use moderate depth to prevent timeouts with WASM
     // UCI_LimitStrength + UCI_Elo handle the actual difficulty
-    // Higher depth just means better move quality at each Elo level
-    return 20;
+    // Depth 12 is sufficient for good play while avoiding timeouts
+    return 12;
   }
 
   /**
@@ -224,14 +237,14 @@ export class FairyStockfishClient {
       this.sendCommand(`position fen ${fen}`);
       this.sendCommand(`go depth ${depth}`);
 
-      // Timeout after 30 seconds
+      // Timeout after 15 seconds (reduced from 30 for faster failure detection)
       setTimeout(() => {
         if (this.pendingResolve) {
           this.pendingResolve = null;
           this.pendingReject = null;
           reject(new Error('Stockfish timeout'));
         }
-      }, 30000);
+      }, 15000);
     });
   }
 
