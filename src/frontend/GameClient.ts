@@ -46,6 +46,21 @@ export class GameClient {
   private messageHandlers: Map<string, MessageHandler[]> = new Map();
   private pendingMoveResolve: ((result: MoveResult) => void) | null = null;
   private pendingMoveReject: ((error: Error) => void) | null = null;
+  private pendingMoveTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private isMovePending: boolean = false;
+
+  /**
+   * Clear pending move state
+   */
+  private clearPendingMove(): void {
+    if (this.pendingMoveTimeoutId) {
+      clearTimeout(this.pendingMoveTimeoutId);
+      this.pendingMoveTimeoutId = null;
+    }
+    this.pendingMoveResolve = null;
+    this.pendingMoveReject = null;
+    this.isMovePending = false;
+  }
 
   /**
    * Create a new game on the server
@@ -146,15 +161,17 @@ export class GameClient {
 
       // Handle move result for pending promise
       if (message.type === 'move_result' || message.type === 'error') {
-        if (this.pendingMoveResolve && message.type === 'move_result') {
-          this.pendingMoveResolve(message as unknown as MoveResult);
-          this.pendingMoveResolve = null;
-          this.pendingMoveReject = null;
-        } else if (this.pendingMoveReject && message.type === 'error') {
+        const resolve = this.pendingMoveResolve;
+        const reject = this.pendingMoveReject;
+        
+        // Clear pending state BEFORE resolving to prevent race conditions
+        this.clearPendingMove();
+        
+        if (resolve && message.type === 'move_result') {
+          resolve(message as unknown as MoveResult);
+        } else if (reject && message.type === 'error') {
           const errorMsg = (message as unknown as { message: string }).message || 'Unknown error';
-          this.pendingMoveReject(new Error(errorMsg));
-          this.pendingMoveResolve = null;
-          this.pendingMoveReject = null;
+          reject(new Error(errorMsg));
         }
       }
 
@@ -179,10 +196,11 @@ export class GameClient {
    */
   private handleDisconnect(): void {
     // Reject any pending move promises immediately so UI doesn't hang
-    if (this.pendingMoveReject) {
-      this.pendingMoveReject(new Error('Connection lost'));
-      this.pendingMoveResolve = null;
-      this.pendingMoveReject = null;
+    const reject = this.pendingMoveReject;
+    this.clearPendingMove();
+    
+    if (reject) {
+      reject(new Error('Connection lost'));
     }
 
     if (this.reconnectAttempts < this.maxReconnectAttempts && this.gameId) {
@@ -215,9 +233,15 @@ export class GameClient {
    * Make a move
    */
   async makeMove(from: string, to: string, promotion?: string): Promise<MoveResult> {
+    // Guard against concurrent move requests
+    if (this.isMovePending) {
+      throw new Error('Move already in progress');
+    }
+
     // Try WebSocket first
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       return new Promise((resolve, reject) => {
+        this.isMovePending = true;
         this.pendingMoveResolve = resolve;
         this.pendingMoveReject = reject;
 
@@ -229,10 +253,9 @@ export class GameClient {
         });
 
         // Timeout after 10 seconds
-        setTimeout(() => {
+        this.pendingMoveTimeoutId = setTimeout(() => {
           if (this.pendingMoveResolve) {
-            this.pendingMoveReject = null;
-            this.pendingMoveResolve = null;
+            this.clearPendingMove();
             reject(new Error('Move timeout'));
           }
         }, 10000);
@@ -257,9 +280,15 @@ export class GameClient {
    * Submit AI move (client-computed)
    */
   async submitAIMove(move: string, thinkingTime?: number, evaluation?: number | string): Promise<MoveResult> {
+    // Guard against concurrent move requests
+    if (this.isMovePending) {
+      throw new Error('Move already in progress');
+    }
+
     // Try WebSocket first
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       return new Promise((resolve, reject) => {
+        this.isMovePending = true;
         this.pendingMoveResolve = resolve;
         this.pendingMoveReject = reject;
 
@@ -270,10 +299,9 @@ export class GameClient {
           evaluation,
         });
 
-        setTimeout(() => {
+        this.pendingMoveTimeoutId = setTimeout(() => {
           if (this.pendingMoveResolve) {
-            this.pendingMoveReject = null;
-            this.pendingMoveResolve = null;
+            this.clearPendingMove();
             reject(new Error('AI move timeout'));
           }
         }, 10000);
