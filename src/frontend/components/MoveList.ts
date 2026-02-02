@@ -63,8 +63,33 @@ export class MoveList {
       </div>
       <div class="move-list-header">Moves</div>
       <div class="move-list-content"></div>
+      <div class="move-nav-bar">
+        <button class="nav-btn nav-first" title="First (↑)">⏮</button>
+        <button class="nav-btn nav-back" title="Back (←)">◀</button>
+        <button class="nav-btn nav-forward" title="Forward (→)">▶</button>
+        <button class="nav-btn nav-last" title="Current (↓)">⏭</button>
+      </div>
     `;
+    
+    // Attach navigation event listeners
+    setTimeout(() => this.attachNavListeners(), 0);
+    
     return wrapper;
+  }
+
+  /**
+   * Attach navigation button listeners
+   */
+  private attachNavListeners(): void {
+    const firstBtn = this.listElement.querySelector('.nav-first');
+    const backBtn = this.listElement.querySelector('.nav-back');
+    const forwardBtn = this.listElement.querySelector('.nav-forward');
+    const lastBtn = this.listElement.querySelector('.nav-last');
+
+    firstBtn?.addEventListener('click', () => this.goToStart());
+    backBtn?.addEventListener('click', () => this.goBack());
+    forwardBtn?.addEventListener('click', () => this.goForward());
+    lastBtn?.addEventListener('click', () => this.goToEnd());
   }
 
   /**
@@ -236,6 +261,45 @@ export class MoveList {
         padding: 24px 16px;
         font-style: italic;
       }
+
+      .move-nav-bar {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px;
+        border-top: 1px solid #333;
+        background: #1a1a2e;
+        border-radius: 0 0 8px 8px;
+      }
+
+      .nav-btn {
+        width: 40px;
+        height: 32px;
+        background: #4a4e69;
+        color: #eee;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .nav-btn:hover:not(:disabled) {
+        background: #5c6078;
+        transform: translateY(-1px);
+      }
+
+      .nav-btn:active:not(:disabled) {
+        transform: translateY(0);
+      }
+
+      .nav-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -332,17 +396,27 @@ export class MoveList {
     if (this.viewingMoveIndex === -1) {
       content.scrollTop = content.scrollHeight;
     }
+
+    // Update navigation button states
+    this.updateNavButtons();
   }
 
   /**
    * Select a position to view (without undoing moves)
+   * @param moveIndex - Move index (0-based), -1 for current, -2 for start position
    */
   selectPosition(moveIndex: number): void {
     const maxIndex = this.sanMoves.length - 1;
-    this.viewingMoveIndex = Math.max(-1, Math.min(moveIndex, maxIndex));
+    // Clamp to valid range: -2 (start) to maxIndex, or -1 (current)
+    if (moveIndex >= this.sanMoves.length) {
+      this.viewingMoveIndex = -1; // Go to current
+    } else {
+      this.viewingMoveIndex = Math.max(-2, Math.min(moveIndex, maxIndex));
+    }
     
     // Update highlighting
     this.updateViewingHighlight();
+    this.updateNavButtons();
     
     // Notify listeners
     this.positionSelectCallbacks.forEach(cb => cb(this.viewingMoveIndex));
@@ -360,7 +434,13 @@ export class MoveList {
       el.classList.remove('move-viewing');
     });
 
+    // Don't highlight anything if at start position (-2) or no moves
+    if (this.viewingMoveIndex === -2 || this.sanMoves.length === 0) {
+      return;
+    }
+
     // Add highlight to current viewing position
+    // -1 means current/latest position
     const viewingIndex = this.viewingMoveIndex === -1 ? this.sanMoves.length - 1 : this.viewingMoveIndex;
     const viewingEl = content.querySelector(`[data-move-index="${viewingIndex}"]`);
     if (viewingEl) {
@@ -370,11 +450,13 @@ export class MoveList {
 
   /**
    * Navigate to first position (before any moves)
+   * Uses special index -2 to represent "start position"
    */
   goToStart(): void {
-    if (this.sanMoves.length === 0) return;
-    this.selectPosition(-1); // -1 represents start position
-    this.positionSelectCallbacks.forEach(cb => cb(-1));
+    this.viewingMoveIndex = -2; // Special value for start position
+    this.updateViewingHighlight();
+    this.updateNavButtons();
+    this.positionSelectCallbacks.forEach(cb => cb(-2));
   }
 
   /**
@@ -382,25 +464,78 @@ export class MoveList {
    */
   goBack(): void {
     if (this.sanMoves.length === 0) return;
-    const current = this.viewingMoveIndex === -1 ? this.sanMoves.length - 1 : this.viewingMoveIndex;
-    this.selectPosition(current - 1);
+    
+    // If at current (-1), go to last move
+    if (this.viewingMoveIndex === -1) {
+      this.selectPosition(this.sanMoves.length - 1);
+    } 
+    // If at start (-2), do nothing
+    else if (this.viewingMoveIndex === -2) {
+      return;
+    }
+    // If at first move (0), go to start
+    else if (this.viewingMoveIndex === 0) {
+      this.goToStart();
+    }
+    // Otherwise go back one move
+    else {
+      this.selectPosition(this.viewingMoveIndex - 1);
+    }
   }
 
   /**
    * Navigate to next position
    */
   goForward(): void {
-    if (this.viewingMoveIndex === -1) return; // Already at latest
-    this.selectPosition(this.viewingMoveIndex + 1);
+    if (this.sanMoves.length === 0) return;
+    
+    // If at start position, go to first move
+    if (this.viewingMoveIndex === -2) {
+      this.selectPosition(0);
+    }
+    // If at last move, go to current
+    else if (this.viewingMoveIndex === this.sanMoves.length - 1) {
+      this.goToEnd();
+    }
+    // If already at current, do nothing
+    else if (this.viewingMoveIndex === -1) {
+      return;
+    }
+    // Otherwise go forward one move
+    else {
+      this.selectPosition(this.viewingMoveIndex + 1);
+    }
   }
 
   /**
-   * Navigate to latest position
+   * Navigate to latest position (current)
    */
   goToEnd(): void {
-    this.viewingMoveIndex = -1;
+    this.viewingMoveIndex = -1; // -1 = current/latest position
     this.updateViewingHighlight();
+    this.updateNavButtons();
     this.positionSelectCallbacks.forEach(cb => cb(-1));
+  }
+
+  /**
+   * Update navigation button states
+   */
+  private updateNavButtons(): void {
+    const firstBtn = this.listElement.querySelector('.nav-first') as HTMLButtonElement;
+    const backBtn = this.listElement.querySelector('.nav-back') as HTMLButtonElement;
+    const forwardBtn = this.listElement.querySelector('.nav-forward') as HTMLButtonElement;
+    const lastBtn = this.listElement.querySelector('.nav-last') as HTMLButtonElement;
+
+    if (!firstBtn || !backBtn || !forwardBtn || !lastBtn) return;
+
+    const atStart = this.viewingMoveIndex === -2;
+    const atCurrent = this.viewingMoveIndex === -1;
+    const noMoves = this.sanMoves.length === 0;
+
+    firstBtn.disabled = atStart || noMoves;
+    backBtn.disabled = atStart || noMoves;
+    forwardBtn.disabled = atCurrent || noMoves;
+    lastBtn.disabled = atCurrent || noMoves;
   }
 
   /**

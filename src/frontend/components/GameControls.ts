@@ -14,12 +14,10 @@ export class GameControls {
   private difficultySlider: DifficultySlider | null = null;
 
   private gameActive: boolean = false;
-  private canUndo: boolean = false;
   private showCoordinates: boolean = true;
 
   private newGameCallbacks: Array<(color: PlayerColor) => void> = [];
   private resignCallbacks: Array<() => void> = [];
-  private undoCallbacks: Array<() => void> = [];
   private hintCallbacks: Array<() => void> = [];
 
   private readonly STORAGE_KEY_COORDS = 'silly-chess-show-coords';
@@ -45,10 +43,6 @@ export class GameControls {
           <button class="control-btn resign-btn" ${!this.gameActive ? 'disabled' : ''}>
             <span class="btn-icon">X</span>
             Resign
-          </button>
-          <button class="control-btn undo-btn" ${!this.canUndo ? 'disabled' : ''}>
-            <span class="btn-icon">←</span>
-            Undo
           </button>
           <button class="control-btn hint-btn" ${!this.gameActive ? 'disabled' : ''}>
             <span class="btn-icon">?</span>
@@ -478,13 +472,11 @@ export class GameControls {
   private attachEventListeners(): void {
     const newGameBtn = this.container.querySelector('.new-game-btn');
     const resignBtn = this.container.querySelector('.resign-btn');
-    const undoBtn = this.container.querySelector('.undo-btn');
     const hintBtn = this.container.querySelector('.hint-btn');
     const settingsBtn = this.container.querySelector('.settings-btn');
 
     newGameBtn?.addEventListener('click', () => this.showModal());
     resignBtn?.addEventListener('click', () => this.handleResign());
-    undoBtn?.addEventListener('click', () => this.handleUndo());
     hintBtn?.addEventListener('click', () => this.handleHint());
     settingsBtn?.addEventListener('click', () => this.showSettings());
   }
@@ -531,14 +523,6 @@ export class GameControls {
   private handleResign(): void {
     if (!this.gameActive) return;
     this.resignCallbacks.forEach(callback => callback());
-  }
-
-  /**
-   * Handle undo action
-   */
-  private handleUndo(): void {
-    if (!this.canUndo) return;
-    this.undoCallbacks.forEach(callback => callback());
   }
 
   /**
@@ -590,17 +574,6 @@ export class GameControls {
   }
 
   /**
-   * Set can undo state
-   */
-  public setCanUndo(canUndo: boolean): void {
-    this.canUndo = canUndo;
-    const undoBtn = this.container.querySelector('.undo-btn') as HTMLButtonElement;
-    if (undoBtn) {
-      undoBtn.disabled = !canUndo;
-    }
-  }
-
-  /**
    * Register new game callback
    */
   public onNewGame(callback: (color: PlayerColor) => void): void {
@@ -612,13 +585,6 @@ export class GameControls {
    */
   public onResign(callback: () => void): void {
     this.resignCallbacks.push(callback);
-  }
-
-  /**
-   * Register undo callback
-   */
-  public onUndo(callback: () => void): void {
-    this.undoCallbacks.push(callback);
   }
 
   /**

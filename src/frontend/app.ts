@@ -240,6 +240,7 @@ export class SillyChessApp {
 
   /**
    * View a historical position (without undoing moves)
+   * @param moveIndex - Move index: -1 = current, -2 = start position, 0+ = after that move
    */
   private viewHistoricalPosition(moveIndex: number): void {
     if (moveIndex === -1) {
@@ -251,7 +252,17 @@ export class SillyChessApp {
       return;
     }
 
-    // View historical position
+    if (moveIndex === -2) {
+      // View start position (before any moves)
+      this.state.viewingHistoryIndex = -2;
+      this.board.setPosition(this.START_FEN);
+      this.board.clearLastMove();
+      this.board.setInteractive(false);
+      this.setStatus('Start position (use → to step forward)');
+      return;
+    }
+
+    // View historical position after a specific move
     this.state.viewingHistoryIndex = moveIndex;
     
     // Get the FEN for this position
@@ -265,7 +276,7 @@ export class SillyChessApp {
     
     const moveNum = Math.floor(moveIndex / 2) + 1;
     const isWhiteMove = moveIndex % 2 === 0;
-    this.setStatus(`Viewing move ${moveNum}${isWhiteMove ? '.' : '...'} (use → to return)`);
+    this.setStatus(`Viewing move ${moveNum}${isWhiteMove ? '.' : '...'} (use → to continue)`);
   }
 
   /**
@@ -350,13 +361,6 @@ export class SillyChessApp {
 
     this.controls.onResign(() => {
       this.handleResign();
-    });
-
-    this.controls.onUndo(() => {
-      // Navigate back in history instead of undo
-      if (this.state.fenHistory.length > 0) {
-        this.moveList.goBack();
-      }
     });
 
     // Move list position navigation
@@ -469,7 +473,6 @@ export class SillyChessApp {
 
       // Update UI
       this.controls.setGameActive(true);
-      this.controls.setCanUndo(false);
       this.board.setInteractive(true);
       this.board.setPosition(gameState.fen);
 
