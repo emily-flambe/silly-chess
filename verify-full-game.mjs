@@ -76,11 +76,24 @@ async function verifyFullGame() {
       const startWait = Date.now();
       const maxWaitTime = 25000; // 25 seconds max wait
       
+      const isPlayerTurn = (status) => {
+        return status?.includes('Your turn') || 
+               status?.includes('You play as white') || 
+               status?.includes('You play as black') ||
+               status?.includes('Game started');
+      };
+      
+      const isGameEnded = (status) => {
+        return status?.includes('Game over') || 
+               status?.includes('Checkmate') || 
+               status?.includes('wins') ||
+               status?.includes('Stalemate');
+      };
+      
       while (Date.now() - startWait < maxWaitTime) {
         const currentStatus = await page.locator('#status-container').textContent();
         
-        if (currentStatus?.includes('Your turn') || currentStatus?.includes('Game over') || 
-            currentStatus?.includes('Checkmate') || currentStatus?.includes('wins')) {
+        if (isPlayerTurn(currentStatus) || isGameEnded(currentStatus)) {
           break;
         }
         
@@ -100,9 +113,9 @@ async function verifyFullGame() {
       
       // Check if it's still not our turn
       const turnStatus = await page.locator('#status-container').textContent();
-      if (!turnStatus?.includes('Your turn')) {
+      if (!isPlayerTurn(turnStatus)) {
         console.log(`⚠️ Not player turn after wait: ${turnStatus}`);
-        if (turnStatus?.includes('Game over') || turnStatus?.includes('Checkmate') || turnStatus?.includes('wins')) {
+        if (isGameEnded(turnStatus)) {
           console.log('🏁 Game ended');
           break;
         }
