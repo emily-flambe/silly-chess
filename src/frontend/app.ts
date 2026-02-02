@@ -564,13 +564,24 @@ export class SillyChessApp {
    * Make AI move using Stockfish (client-side) and submit to server
    */
   private async makeAIMove(): Promise<void> {
-    if (!this.state.isGameActive || !this.stockfish?.isReady()) {
+    // Guard against re-entry - if already thinking, don't start another
+    if (!this.state.isGameActive || !this.stockfish?.isReady() || this.state.isThinking) {
       return;
     }
 
     this.state.isThinking = true;
     this.board.setInteractive(false);
     this.setStatus('AI is thinking...');
+    
+    // Overall timeout to prevent permanent hangs
+    const overallTimeout = setTimeout(() => {
+      console.error('makeAIMove: Overall timeout - forcing recovery');
+      this.state.isThinking = false;
+      if (this.state.isGameActive) {
+        this.board.setInteractive(true);
+      }
+      this.setStatus('AI timeout - Your turn');
+    }, 20000);
 
     const startTime = Date.now();
 
@@ -629,12 +640,13 @@ export class SillyChessApp {
       console.error('AI move error:', error);
       this.setStatus('AI error - Your turn');
     } finally {
+      clearTimeout(overallTimeout);
       this.state.isThinking = false;
       if (this.state.isGameActive) {
         this.board.setInteractive(true);
       }
       // Safety: ensure status is sensible if still showing "AI is thinking..."
-      if (this.containers.status.textContent === 'AI is thinking...') {
+      if (this.containers.status.textContent?.includes('AI is thinking')) {
         this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
       }
     }

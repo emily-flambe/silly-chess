@@ -318,7 +318,7 @@ export class FairyStockfishClient {
       setTimeout(() => {
         this.worker?.removeEventListener('message', analyzeHandler);
         reject(new Error('Analysis timeout'));
-      }, 30000);
+      }, 5000); // Reduced from 30s - evaluation is optional
     });
   }
 
