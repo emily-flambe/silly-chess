@@ -18,6 +18,8 @@ export class FairyStockfishClient {
   private currentVariant: string = 'chess';
   private pendingResolve: ((value: string) => void) | null = null;
   private pendingReject: ((error: Error) => void) | null = null;
+  private pendingTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private isOperationPending: boolean = false;
 
   /**
    * Initialize the Stockfish WASM engine
@@ -96,14 +98,16 @@ export class FairyStockfishClient {
       if (message.startsWith('bestmove')) {
         const parts = message.split(' ');
         const move = parts[1];
-        if (this.pendingResolve && move && move !== '(none)') {
-          this.pendingResolve(move);
-          this.pendingResolve = null;
-          this.pendingReject = null;
-        } else if (this.pendingReject) {
-          this.pendingReject(new Error('No legal move found'));
-          this.pendingResolve = null;
-          this.pendingReject = null;
+        const resolve = this.pendingResolve;
+        const reject = this.pendingReject;
+        
+        // Clear pending state BEFORE resolving to prevent race conditions
+        this.clearPending();
+        
+        if (resolve && move && move !== '(none)') {
+          resolve(move);
+        } else if (reject) {
+          reject(new Error('No legal move found'));
         }
       }
     });
@@ -111,14 +115,30 @@ export class FairyStockfishClient {
     // Handle worker errors during gameplay (not just initialization)
     this.worker.addEventListener('error', (error: ErrorEvent) => {
       console.error('Stockfish worker error:', error.message);
-      if (this.pendingReject) {
-        this.pendingReject(new Error(`Stockfish worker error: ${error.message}`));
-        this.pendingResolve = null;
-        this.pendingReject = null;
+      const reject = this.pendingReject;
+      
+      // Clear pending state BEFORE rejecting
+      this.clearPending();
+      
+      if (reject) {
+        reject(new Error(`Stockfish worker error: ${error.message}`));
       }
       // Mark as not initialized to prevent further use
       this.isInitialized = false;
     });
+  }
+
+  /**
+   * Clear all pending operation state
+   */
+  private clearPending(): void {
+    if (this.pendingTimeoutId) {
+      clearTimeout(this.pendingTimeoutId);
+      this.pendingTimeoutId = null;
+    }
+    this.pendingResolve = null;
+    this.pendingReject = null;
+    this.isOperationPending = false;
   }
 
   /**
@@ -227,9 +247,15 @@ export class FairyStockfishClient {
       throw new Error('Stockfish not initialized');
     }
 
+    // Guard against concurrent calls - reject if operation already pending
+    if (this.isOperationPending) {
+      throw new Error('Operation already in progress');
+    }
+
     const depth = options?.depth ?? this.getDepthForElo();
 
     return new Promise((resolve, reject) => {
+      this.isOperationPending = true;
       this.pendingResolve = resolve;
       this.pendingReject = reject;
 
@@ -238,10 +264,9 @@ export class FairyStockfishClient {
       this.sendCommand(`go depth ${depth}`);
 
       // Timeout after 15 seconds (reduced from 30 for faster failure detection)
-      setTimeout(() => {
+      this.pendingTimeoutId = setTimeout(() => {
         if (this.pendingResolve) {
-          this.pendingResolve = null;
-          this.pendingReject = null;
+          this.clearPending();
           reject(new Error('Stockfish timeout'));
         }
       }, 15000);
@@ -271,6 +296,16 @@ export class FairyStockfishClient {
       let evaluation: number | string = 0;
       let bestMove = '';
       let actualDepth = depth;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      let settled = false;
+
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        this.worker?.removeEventListener('message', analyzeHandler);
+      };
 
       const analyzeHandler = (event: MessageEvent) => {
         const msg = String(event.data);
@@ -295,7 +330,10 @@ export class FairyStockfishClient {
         }
 
         if (msg.startsWith('bestmove')) {
-          this.worker?.removeEventListener('message', analyzeHandler);
+          if (settled) return;
+          settled = true;
+          cleanup();
+          
           bestMove = msg.split(' ')[1] || '';
 
           const evalNum = typeof evaluation === 'number' ? evaluation : 0;
@@ -315,8 +353,10 @@ export class FairyStockfishClient {
       this.sendCommand(`position fen ${fen}`);
       this.sendCommand(`go depth ${depth}`);
 
-      setTimeout(() => {
-        this.worker?.removeEventListener('message', analyzeHandler);
+      timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(new Error('Analysis timeout'));
       }, 5000); // Reduced from 30s - evaluation is optional
     });
@@ -326,6 +366,15 @@ export class FairyStockfishClient {
    * Stop current analysis and wait for engine to be ready
    */
   async stop(): Promise<void> {
+    // Clear any pending operations first
+    const reject = this.pendingReject;
+    this.clearPending();
+    
+    // Reject the pending promise so callers know it was cancelled
+    if (reject) {
+      reject(new Error('Operation cancelled'));
+    }
+    
     this.sendCommand('stop');
     this.sendCommand('isready');
     await this.waitForReady();

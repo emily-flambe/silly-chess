@@ -324,7 +324,10 @@ export class ChessGame {
    */
   private async processMove(ws: WebSocket, data: MoveMessage): Promise<void> {
     const result = await this.processPlayerMove(data.from, data.to, data.promotion);
-    this.broadcast(result);
+    // ALWAYS respond to caller first to ensure they get the response even if broadcast fails
+    this.sendToSocket(ws, result);
+    // Then broadcast to other clients (they may have disconnected, that's ok)
+    this.broadcastExcept(ws, result);
   }
 
   /**
@@ -332,7 +335,10 @@ export class ChessGame {
    */
   private async processAIMove(ws: WebSocket, data: AIMoveMessage): Promise<void> {
     const result = await this.processAIMoveInternal(data.move, data.thinkingTime, data.evaluation);
-    this.broadcast(result);
+    // ALWAYS respond to caller first to ensure they get the response even if broadcast fails
+    this.sendToSocket(ws, result);
+    // Then broadcast to other clients (they may have disconnected, that's ok)
+    this.broadcastExcept(ws, result);
   }
 
   /**
@@ -620,6 +626,23 @@ export class ChessGame {
     // Use getWebSockets() for hibernation compatibility
     const sockets = this.state.getWebSockets();
     for (const ws of sockets) {
+      try {
+        ws.send(data);
+      } catch (error) {
+        // Socket will be cleaned up by webSocketClose/webSocketError
+      }
+    }
+  }
+
+  /**
+   * Broadcast message to all connected clients except one
+   */
+  private broadcastExcept(excludeWs: WebSocket, message: WSMessage): void {
+    const data = JSON.stringify(message);
+    // Use getWebSockets() for hibernation compatibility
+    const sockets = this.state.getWebSockets();
+    for (const ws of sockets) {
+      if (ws === excludeWs) continue;
       try {
         ws.send(data);
       } catch (error) {
