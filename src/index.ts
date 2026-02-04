@@ -357,7 +357,19 @@ app.post('/api/games/:id/end', async (c) => {
   }
 });
 
-// 404 handler
+// SPA fallback for client-side routing (e.g., /game/:id)
+app.get('/game/*', async (c) => {
+  // Serve index.html for game routes so client-side router can handle them
+  const response = await c.env.ASSETS.fetch(new Request(new URL('/', c.req.url)));
+  return new Response(response.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+    },
+  });
+});
+
+// 404 handler for API routes
 app.notFound((c) => {
   return c.json({ error: 'Not found' }, 404);
 });

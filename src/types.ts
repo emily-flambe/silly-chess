@@ -6,6 +6,7 @@
 export interface Env {
   DB: D1Database;
   CHESS_GAME: DurableObjectNamespace;
+  ASSETS: Fetcher;  // Static assets binding
   ENVIRONMENT?: string;
 }
 

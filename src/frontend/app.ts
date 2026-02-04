@@ -327,7 +327,7 @@ export class SillyChessApp {
   }
 
   /**
-   * Check for existing game to reconnect
+   * Check for existing game to reconnect or review
    */
   private async checkForExistingGame(): Promise<void> {
     // Only restore if URL has a game ID - don't auto-redirect from homepage
@@ -342,6 +342,7 @@ export class SillyChessApp {
       const gameState = await this.gameClient.reconnectToGame(urlGameId);
       
       if (gameState.status === 'active') {
+        // Active game - restore for play
         this.syncFromServer(gameState);
         this.controls.setGameActive(true);
         this.board.setInteractive(true);
@@ -354,14 +355,85 @@ export class SillyChessApp {
         this.setStatus('Game restored - Your turn');
         await this.updateEvaluation();
       } else {
-        // Game ended, redirect to homepage
-        localStorage.removeItem('silly-chess-game-id');
-        this.clearGameUrl();
+        // Completed game - load for review
+        this.loadCompletedGame(gameState);
       }
     } catch (error) {
       console.log('No existing game to restore');
       localStorage.removeItem('silly-chess-game-id');
       this.clearGameUrl();
+    }
+  }
+
+  /**
+   * Load a completed game for review
+   */
+  private loadCompletedGame(gameState: GameState): void {
+    // Sync state from server
+    this.state.gameId = gameState.gameId;
+    this.state.playerColor = gameState.playerColor;
+    this.state.fen = gameState.fen;
+    this.state.turn = gameState.turn;
+    this.state.isGameActive = false;
+    this.state.isThinking = false;
+    this.state.viewingHistoryIndex = -1;
+    
+    // Rebuild FEN history from SAN moves for navigation
+    this.state.sanMoves = gameState.moveHistory || [];
+    this.state.fenHistory = this.rebuildFenHistory(this.state.sanMoves);
+
+    // Update board
+    this.board.setPosition(gameState.fen);
+    this.board.setInteractive(false);
+    if (gameState.lastMove) {
+      this.board.setLastMove(gameState.lastMove.from, gameState.lastMove.to);
+    }
+    
+    // Flip board if played as black
+    if (gameState.playerColor === 'black') {
+      this.board.flip();
+    }
+
+    // Update move list
+    this.moveList.updateFromSAN(this.state.sanMoves);
+
+    // Controls should show game as inactive
+    this.controls.setGameActive(false);
+
+    // Clear localStorage (don't auto-restore completed games)
+    localStorage.removeItem('silly-chess-game-id');
+
+    // Set appropriate status message
+    const statusMessage = this.getCompletedGameStatus(gameState.status, gameState.playerColor);
+    this.setStatus(statusMessage);
+
+    // Update evaluation bar for final position
+    this.updateEvaluation();
+  }
+
+  /**
+   * Get a human-readable status message for a completed game
+   */
+  private getCompletedGameStatus(status: string, playerColor: PlayerColor): string {
+    const playerWon = (status === 'checkmate' && 
+      ((playerColor === 'white' && this.state.turn === 'b') ||
+       (playerColor === 'black' && this.state.turn === 'w')));
+    
+    switch (status) {
+      case 'checkmate':
+        if (playerWon) {
+          return '🏆 You won by checkmate! Use ← → to review.';
+        } else {
+          return '💀 You lost by checkmate. Use ← → to review.';
+        }
+      case 'stalemate':
+        return '🤝 Draw by stalemate. Use ← → to review.';
+      case 'draw':
+        return '🤝 Game drawn. Use ← → to review.';
+      case 'resigned':
+        return '🏳️ Game ended by resignation. Use ← → to review.';
+      default:
+        return 'Game over. Use ← → to review.';
     }
   }
 
@@ -388,9 +460,10 @@ export class SillyChessApp {
       this.viewHistoricalPosition(moveIndex);
     });
 
-    // Keyboard navigation for move history
+    // Keyboard navigation for move history (works during game and review)
     document.addEventListener('keydown', (e) => {
-      if (!this.state.isGameActive) return;
+      // Allow navigation if there are moves to review
+      if (this.state.sanMoves.length === 0) return;
       
       switch (e.key) {
         case 'ArrowLeft':
@@ -720,25 +793,36 @@ export class SillyChessApp {
     this.board.setInteractive(false);
     this.controls.setGameActive(false);
 
-    // Clear saved game (keep URL so game can still be viewed)
+    // Clear saved game from localStorage (URL is kept for sharing/review)
     localStorage.removeItem('silly-chess-game-id');
 
+    // Build status message with review hint
     let message = '';
+    const reviewHint = ' Use ← → to review.';
+    
     switch (status) {
       case 'checkmate':
-        message = extraMessage || 'Checkmate!';
+        if (extraMessage) {
+          message = extraMessage + reviewHint;
+        } else {
+          // Determine winner based on whose turn it is (loser's turn when checkmated)
+          const playerWon = (this.state.playerColor === 'white' && this.state.turn === 'b') ||
+                           (this.state.playerColor === 'black' && this.state.turn === 'w');
+          message = playerWon ? '🏆 You won by checkmate!' : '💀 Checkmate - you lost.';
+          message += reviewHint;
+        }
         break;
       case 'stalemate':
-        message = 'Stalemate! Game is a draw.';
+        message = '🤝 Stalemate - draw!' + reviewHint;
         break;
       case 'draw':
-        message = 'Game is a draw.';
+        message = '🤝 Game drawn.' + reviewHint;
         break;
       case 'resigned':
-        message = 'Game resigned.';
+        message = '🏳️ Game resigned.' + reviewHint;
         break;
       default:
-        message = 'Game over.';
+        message = 'Game over.' + reviewHint;
     }
 
     this.setStatus(message);
