@@ -465,9 +465,16 @@ export class MoveList {
   goBack(): void {
     if (this.sanMoves.length === 0) return;
     
-    // If at current (-1), go to last move
+    // If at current (-1), go to the second-to-last move (one step back from current)
+    // Note: -1 and (length-1) are the same visual position, so we need to go to length-2
     if (this.viewingMoveIndex === -1) {
-      this.selectPosition(this.sanMoves.length - 1);
+      if (this.sanMoves.length === 1) {
+        // Only one move - go to start position
+        this.goToStart();
+      } else {
+        // Go to second-to-last move (one step back)
+        this.selectPosition(this.sanMoves.length - 2);
+      }
     } 
     // If at start (-2), do nothing
     else if (this.viewingMoveIndex === -2) {

@@ -8,6 +8,7 @@
  * - Stockfish still runs client-side for AI computation
  */
 
+import { Chess } from 'chess.js';
 import { FairyStockfishClient } from '../lib/stockfish';
 import { ChessBoard } from './components/Board';
 import { GameControls } from './components/GameControls';
@@ -161,6 +162,26 @@ export class SillyChessApp {
   }
 
   /**
+   * Rebuild FEN history from SAN moves by replaying them with chess.js
+   */
+  private rebuildFenHistory(sanMoves: string[]): string[] {
+    const fenHistory: string[] = [];
+    const chess = new Chess();
+    
+    for (const san of sanMoves) {
+      try {
+        chess.move(san);
+        fenHistory.push(chess.fen());
+      } catch (e) {
+        console.error('Failed to replay move for FEN history:', san, e);
+        break;
+      }
+    }
+    
+    return fenHistory;
+  }
+
+  /**
    * Sync local state from server
    */
   private syncFromServer(gameState: GameState): void {
@@ -171,10 +192,9 @@ export class SillyChessApp {
     this.state.isGameActive = gameState.status === 'active';
     this.state.viewingHistoryIndex = -1;
     
-    // Note: FEN history isn't available from server sync - would need to replay moves
-    // For reconnected games, history navigation won't work until new moves are made
-    this.state.fenHistory = [];
+    // Rebuild FEN history from SAN moves so back/forward navigation works
     this.state.sanMoves = gameState.moveHistory || [];
+    this.state.fenHistory = this.rebuildFenHistory(this.state.sanMoves);
 
     // Update board
     this.board.setPosition(gameState.fen);
