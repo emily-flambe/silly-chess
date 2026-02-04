@@ -113,7 +113,7 @@ export class MoveList {
       }
 
       .captured-pieces-section {
-        padding: 8px 12px;
+        padding: 12px 16px;
         border-bottom: 1px solid #333;
       }
 
@@ -129,27 +129,28 @@ export class MoveList {
       .captured-row {
         display: flex;
         align-items: center;
-        gap: 6px;
-        min-height: 24px;
+        gap: 8px;
+        min-height: 36px;
+        margin-bottom: 2px;
       }
 
       .captured-label {
-        font-size: 11px;
-        color: #666;
+        font-size: 12px;
+        color: #888;
         font-weight: 600;
-        min-width: 18px;
+        min-width: 20px;
       }
 
       .captured-pieces {
         display: flex;
         flex-wrap: wrap;
-        gap: 1px;
-        font-size: 18px;
+        gap: 4px;
+        font-size: 26px;
         line-height: 1;
       }
 
       .captured-piece {
-        opacity: 0.9;
+        opacity: 0.95;
       }
 
       .captured-piece-white {
@@ -158,12 +159,13 @@ export class MoveList {
           -1px -1px 0 #000,
           1px -1px 0 #000,
           -1px 1px 0 #000,
-          1px 1px 0 #000;
+          1px 1px 0 #000,
+          0 2px 4px rgba(0, 0, 0, 0.3);
       }
 
       .captured-piece-black {
-        color: #111;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        color: #222;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
       }
 
       .move-list-header {
