@@ -38,13 +38,16 @@ export interface AIMoveMessage extends WSMessage {
 export interface GameStateMessage extends WSMessage {
   type: 'game_state';
   gameId: string;
+  gameMode: GameMode;
   fen: string;
-  playerColor: PlayerColor;
+  playerColor: PlayerColor;  // Your color (for this connection)
+  players: Players;          // Who's playing what
   status: GameStatus;
   moveHistory: string[];
   turn: 'w' | 'b';
   isCheck: boolean;
   lastMove?: { from: string; to: string };
+  waitingForOpponent?: boolean;  // True if vs-player and opponent hasn't joined
 }
 
 export interface ErrorMessage extends WSMessage {
@@ -66,10 +69,21 @@ export interface MoveResultMessage extends WSMessage {
   lastMove?: { from: string; to: string };
 }
 
+// Game mode types
+export type GameMode = 'vs-ai' | 'vs-player';
+
+// Player tracking for two-player games
+export interface Players {
+  white: string | null;  // playerToken
+  black: string | null;  // playerToken
+}
+
 // Stored game state
 interface GameState {
   gameId: string;
-  playerColor: PlayerColor;
+  gameMode: GameMode;
+  players: Players;
+  playerColor: PlayerColor;  // Legacy: creator's color for vs-ai mode
   fen: string;
   moveHistory: string[];  // SAN notation
   uciHistory: string[];   // UCI notation for logging
@@ -116,6 +130,9 @@ export class ChessGame {
       case 'POST':
         if (url.pathname.endsWith('/create')) {
           return this.handleCreateGame(request);
+        }
+        if (url.pathname.endsWith('/join')) {
+          return this.handleJoinGame(request);
         }
         if (url.pathname.endsWith('/move')) {
           return this.handleMove(request);
@@ -229,16 +246,27 @@ export class ChessGame {
       playerColor: PlayerColor;
       aiElo: number;
       userId?: string;
+      gameMode?: GameMode;
+      playerToken?: string;
     };
 
-    const { gameId, playerColor, aiElo, userId } = body;
+    const { gameId, playerColor, aiElo, userId, gameMode = 'vs-ai', playerToken } = body;
 
     // Initialize chess engine
     this.chess = new Chess();
 
+    // Set up players based on game mode
+    const players: Players = { white: null, black: null };
+    if (gameMode === 'vs-player' && playerToken) {
+      // Creator takes their chosen color
+      players[playerColor] = playerToken;
+    }
+
     // Create game state
     this.gameState = {
       gameId,
+      gameMode,
+      players,
       playerColor,
       fen: this.chess.fen(),
       moveHistory: [],
@@ -271,15 +299,89 @@ export class ChessGame {
     // Broadcast to all connected clients
     this.broadcast(this.buildGameStateMessage());
 
-    return Response.json({ success: true, gameState: this.gameState });
+    return Response.json({ 
+      success: true, 
+      gameId,
+      gameMode,
+      playerColor,
+      playerToken,
+      gameState: this.gameState 
+    });
+  }
+
+  /**
+   * Join an existing two-player game
+   */
+  private async handleJoinGame(request: Request): Promise<Response> {
+    const body = await request.json() as { 
+      playerToken: string;
+    };
+
+    const { playerToken } = body;
+
+    if (!this.gameState) {
+      return Response.json({ error: 'Game not found' }, { status: 404 });
+    }
+
+    if (this.gameState.gameMode !== 'vs-player') {
+      return Response.json({ error: 'Cannot join AI game' }, { status: 400 });
+    }
+
+    // Check if game is full
+    if (this.gameState.players.white && this.gameState.players.black) {
+      // Check if this player is already in the game (reconnect)
+      if (this.gameState.players.white === playerToken) {
+        return Response.json({
+          success: true,
+          gameId: this.gameState.gameId,
+          playerColor: 'white' as PlayerColor,
+          playerToken,
+          gameState: this.gameState
+        });
+      }
+      if (this.gameState.players.black === playerToken) {
+        return Response.json({
+          success: true,
+          gameId: this.gameState.gameId,
+          playerColor: 'black' as PlayerColor,
+          playerToken,
+          gameState: this.gameState
+        });
+      }
+      return Response.json({ error: 'Game is full' }, { status: 400 });
+    }
+
+    // Assign the remaining color
+    let assignedColor: PlayerColor;
+    if (!this.gameState.players.white) {
+      this.gameState.players.white = playerToken;
+      assignedColor = 'white';
+    } else {
+      this.gameState.players.black = playerToken;
+      assignedColor = 'black';
+    }
+
+    this.gameState.updatedAt = Date.now();
+    await this.state.storage.put('gameState', this.gameState);
+
+    // Broadcast updated state (opponent joined!)
+    this.broadcast(this.buildGameStateMessage());
+
+    return Response.json({
+      success: true,
+      gameId: this.gameState.gameId,
+      playerColor: assignedColor,
+      playerToken,
+      gameState: this.gameState
+    });
   }
 
   /**
    * Handle player move via REST
    */
   private async handleMove(request: Request): Promise<Response> {
-    const body = await request.json() as MoveMessage;
-    const result = await this.processPlayerMove(body.from, body.to, body.promotion);
+    const body = await request.json() as MoveMessage & { playerToken?: string };
+    const result = await this.processPlayerMove(body.from, body.to, body.promotion, body.playerToken);
     return Response.json(result);
   }
 
@@ -344,7 +446,7 @@ export class ChessGame {
   /**
    * Internal player move processing
    */
-  private async processPlayerMove(from: string, to: string, promotion?: string): Promise<MoveResultMessage | ErrorMessage> {
+  private async processPlayerMove(from: string, to: string, promotion?: string, playerToken?: string): Promise<MoveResultMessage | ErrorMessage> {
     if (!this.gameState || this.gameState.status !== 'active') {
       return { type: 'error', message: 'Game not active' };
     }
@@ -354,10 +456,30 @@ export class ChessGame {
       this.chess.load(this.gameState.fen);
     }
 
-    // Check if it's player's turn
     const currentTurn = this.chess.turn() === 'w' ? 'white' : 'black';
-    if (currentTurn !== this.gameState.playerColor) {
-      return { type: 'error', message: 'Not your turn' };
+
+    // Turn validation based on game mode
+    if (this.gameState.gameMode === 'vs-player') {
+      // Two-player mode: validate by playerToken
+      if (!playerToken) {
+        return { type: 'error', message: 'Player token required for two-player games' };
+      }
+
+      // Check that both players have joined
+      if (!this.gameState.players.white || !this.gameState.players.black) {
+        return { type: 'error', message: 'Waiting for opponent to join' };
+      }
+
+      // Verify this player is allowed to move
+      const expectedToken = this.gameState.players[currentTurn];
+      if (playerToken !== expectedToken) {
+        return { type: 'error', message: 'Not your turn' };
+      }
+    } else {
+      // vs-ai mode: legacy behavior - player can only move their color
+      if (currentTurn !== this.gameState.playerColor) {
+        return { type: 'error', message: 'Not your turn' };
+      }
     }
 
     // Try to make the move
@@ -562,8 +684,9 @@ export class ChessGame {
 
   /**
    * Build game state message
+   * @param forPlayerToken - If provided, sets playerColor to this player's color
    */
-  private buildGameStateMessage(): GameStateMessage {
+  private buildGameStateMessage(forPlayerToken?: string): GameStateMessage {
     if (!this.gameState) {
       throw new Error('No game state');
     }
@@ -575,16 +698,33 @@ export class ChessGame {
         }
       : undefined;
 
+    // Determine the player's color for this message
+    let playerColor = this.gameState.playerColor;
+    if (this.gameState.gameMode === 'vs-player' && forPlayerToken) {
+      if (this.gameState.players.white === forPlayerToken) {
+        playerColor = 'white';
+      } else if (this.gameState.players.black === forPlayerToken) {
+        playerColor = 'black';
+      }
+    }
+
+    // Check if waiting for opponent in two-player mode
+    const waitingForOpponent = this.gameState.gameMode === 'vs-player' && 
+      (!this.gameState.players.white || !this.gameState.players.black);
+
     return {
       type: 'game_state',
       gameId: this.gameState.gameId,
+      gameMode: this.gameState.gameMode,
       fen: this.gameState.fen,
-      playerColor: this.gameState.playerColor,
+      playerColor,
+      players: this.gameState.players,
       status: this.gameState.status,
       moveHistory: this.gameState.moveHistory,
       turn: this.chess.turn(),
       isCheck: this.chess.isCheck(),
       lastMove,
+      waitingForOpponent,
     };
   }
 

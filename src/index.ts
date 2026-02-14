@@ -170,6 +170,7 @@ app.post('/api/games', async (c) => {
     const body = await c.req.json() as { 
       player_color?: 'white' | 'black';
       ai_elo?: number;
+      mode?: 'vs-ai' | 'vs-player';
     };
 
     // Set user cookie
@@ -184,6 +185,10 @@ app.post('/api/games', async (c) => {
     const gameId = crypto.randomUUID();
     const playerColor = body.player_color || 'white';
     const aiElo = body.ai_elo || 1500;
+    const gameMode = body.mode || 'vs-ai';
+    
+    // Generate player token for two-player games
+    const playerToken = gameMode === 'vs-player' ? crypto.randomUUID() : undefined;
 
     // Create Durable Object instance for this game
     const doId = c.env.CHESS_GAME.idFromName(gameId);
@@ -198,6 +203,8 @@ app.post('/api/games', async (c) => {
         playerColor,
         aiElo,
         userId,
+        gameMode,
+        playerToken,
       }),
     }));
 
@@ -207,11 +214,47 @@ app.post('/api/games', async (c) => {
       id: gameId,
       player_color: playerColor,
       ai_elo: aiElo,
+      mode: gameMode,
+      player_token: playerToken,
       ...result,
     }, 201);
   } catch (error) {
     console.error('Error creating game:', error);
     return c.json({ error: 'Failed to create game' }, 500);
+  }
+});
+
+// Join an existing two-player game
+app.post('/api/games/:id/join', async (c) => {
+  try {
+    const gameId = c.req.param('id');
+    
+    // Generate a unique token for this player
+    const playerToken = crypto.randomUUID();
+
+    const doId = c.env.CHESS_GAME.idFromName(gameId);
+    const stub = c.env.CHESS_GAME.get(doId);
+
+    const response = await stub.fetch(new Request('https://do/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerToken }),
+    }));
+
+    const result = await response.json() as Record<string, unknown>;
+    
+    if (!response.ok) {
+      return c.json(result, response.status as 400 | 404);
+    }
+
+    return c.json({
+      id: gameId,
+      player_token: playerToken,
+      ...result,
+    });
+  } catch (error) {
+    console.error('Error joining game:', error);
+    return c.json({ error: 'Failed to join game' }, 500);
   }
 });
 
@@ -268,7 +311,12 @@ app.get('/api/games/:id', async (c) => {
 app.post('/api/games/:id/move', async (c) => {
   try {
     const gameId = c.req.param('id');
-    const body = await c.req.json() as { from: string; to: string; promotion?: string };
+    const body = await c.req.json() as { 
+      from: string; 
+      to: string; 
+      promotion?: string;
+      player_token?: string;  // Required for two-player games
+    };
 
     const doId = c.env.CHESS_GAME.idFromName(gameId);
     const stub = c.env.CHESS_GAME.get(doId);
@@ -276,7 +324,12 @@ app.post('/api/games/:id/move', async (c) => {
     const response = await stub.fetch(new Request('https://do/move', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        from: body.from,
+        to: body.to,
+        promotion: body.promotion,
+        playerToken: body.player_token,
+      }),
     }));
 
     const result = await response.json();

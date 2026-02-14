@@ -104,23 +104,55 @@ Response:
 POST /api/games
 ```
 
-Request:
+Request (vs AI - default):
 ```json
 {
-  "opponent_elo": 1500
+  "player_color": "white",
+  "ai_elo": 1500
 }
+```
+
+Request (two-player):
+```json
+{
+  "mode": "vs-player",
+  "player_color": "white"
+}
+```
+
+Response (two-player):
+```json
+{
+  "id": "game-uuid",
+  "mode": "vs-player",
+  "player_color": "white",
+  "player_token": "your-secret-token",
+  "gameState": {
+    "gameId": "game-uuid",
+    "gameMode": "vs-player",
+    "players": { "white": "your-token", "black": null },
+    "fen": "starting-position",
+    "status": "active"
+  }
+}
+```
+
+**Important**: Save `player_token` — you need it to make moves in two-player games.
+
+#### Join Two-Player Game
+```
+POST /api/games/:id/join
 ```
 
 Response:
 ```json
 {
-  "id": "uuid",
-  "user_id": "uuid",
-  "pgn": "",
-  "result": "*",
-  "opponent_elo": 1500,
-  "created_at": 1732838400,
-  "ended_at": null
+  "id": "game-uuid",
+  "player_color": "black",
+  "player_token": "your-secret-token",
+  "gameState": {
+    "players": { "white": "creator-token", "black": "your-token" }
+  }
 }
 ```
 
@@ -139,6 +171,51 @@ Request:
 {
   "pgn": "1. e4 e5 2. Nf3 Nc6",
   "result": "*"
+}
+```
+
+#### Make Move
+```
+POST /api/games/:id/move
+```
+
+Request (two-player - requires player_token):
+```json
+{
+  "from": "e2",
+  "to": "e4",
+  "player_token": "your-secret-token"
+}
+```
+
+Request (vs AI - no token needed):
+```json
+{
+  "from": "e2",
+  "to": "e4"
+}
+```
+
+Response:
+```json
+{
+  "type": "move_result",
+  "success": true,
+  "fen": "new-position",
+  "san": "e4",
+  "status": "active",
+  "turn": "b",
+  "isCheck": false,
+  "isCheckmate": false,
+  "lastMove": { "from": "e2", "to": "e4" }
+}
+```
+
+Error (wrong turn):
+```json
+{
+  "type": "error",
+  "message": "Not your turn"
 }
 ```
 

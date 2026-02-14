@@ -41,6 +41,11 @@ export default defineConfig({
           // Copy Stockfish worker wrapper
           src: '../lib/stockfish/stockfish-worker-wrapper.js',
           dest: 'wasm'
+        },
+        {
+          // Copy _routes.json for Cloudflare asset routing
+          src: '../../public/_routes.json',
+          dest: '.'
         }
       ]
     })
