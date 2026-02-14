@@ -382,6 +382,12 @@ export class ChessGame {
   private async handleMove(request: Request): Promise<Response> {
     const body = await request.json() as MoveMessage & { playerToken?: string };
     const result = await this.processPlayerMove(body.from, body.to, body.promotion, body.playerToken);
+    
+    // Broadcast to all WebSocket clients for real-time updates
+    if (result.type === 'move_result' && result.success) {
+      this.broadcast(result);
+    }
+    
     return Response.json(result);
   }
 
@@ -391,6 +397,12 @@ export class ChessGame {
   private async handleAIMove(request: Request): Promise<Response> {
     const body = await request.json() as AIMoveMessage;
     const result = await this.processAIMoveInternal(body.move, body.thinkingTime, body.evaluation);
+    
+    // Broadcast to all WebSocket clients for real-time updates
+    if (result.type === 'move_result' && result.success) {
+      this.broadcast(result);
+    }
+    
     return Response.json(result);
   }
 
