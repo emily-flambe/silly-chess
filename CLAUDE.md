@@ -51,3 +51,9 @@ See [.claude/ai-behavior.md](.claude/ai-behavior.md) for communication style and
 
 - **Deployment**: [.claude/deployment.md](.claude/deployment.md) - Wrangler commands and Cloudflare setup
 - **Coding Standards**: [.claude/coding-standards.md](.claude/coding-standards.md) - TypeScript patterns and conventions
+
+## Knowledge Graph (Agent-MCP)
+
+After significant changes (new features, architecture decisions, schema changes), save context to Agent-MCP using `update_project_context`. Use the key prefix `silly-chess/` (e.g., `silly-chess/architecture`).
+
+Update existing entries when information changes. Create new keys for new topics. This ensures any agent in any session can retrieve project context via `ask_project_rag`.
