@@ -126,9 +126,12 @@ export class SillyChessApp {
       }
 
       // Check for existing game to reconnect
-      await this.checkForExistingGame();
+      const hasExistingGame = await this.checkForExistingGame();
 
-      this.setStatus('Ready - Click "New Game" to start');
+      if (!hasExistingGame) {
+        this.setStatus('Choose a game mode to start playing');
+        this.controls.showModal();
+      }
     } catch (error) {
       console.error('Failed to initialize Stockfish:', error);
       this.setStatus('Chess engine unavailable - AI opponent disabled');
@@ -351,13 +354,13 @@ export class SillyChessApp {
   /**
    * Check for existing game to reconnect or review
    */
-  private async checkForExistingGame(): Promise<void> {
+  private async checkForExistingGame(): Promise<boolean> {
     // Only restore if URL has a game ID - don't auto-redirect from homepage
     const urlGameId = this.getGameIdFromUrl();
     if (!urlGameId) {
       // On homepage, clear any stale localStorage
       localStorage.removeItem('silly-chess-game-id');
-      return;
+      return false;
     }
 
     try {
@@ -383,7 +386,7 @@ export class SillyChessApp {
         this.syncFromServer({ ...joinState, playerColor, gameMode: 'vs-player' });
         this.controls.setGameActive(true);
         if (playerColor === 'black') this.board.flip();
-        return;
+        return true;
       }
 
       // Reconnect (restore saved token if available)
@@ -419,10 +422,12 @@ export class SillyChessApp {
         // Completed game - load for review
         this.loadCompletedGame(gameState);
       }
+      return true;
     } catch (error) {
       console.log('No existing game to restore');
       localStorage.removeItem('silly-chess-game-id');
       this.clearGameUrl();
+      return false;
     }
   }
 
