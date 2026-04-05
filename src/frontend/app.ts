@@ -39,6 +39,7 @@ export class SillyChessApp {
   private gameClient!: GameClient;
 
   private readonly START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  private evalRequestId = 0;
 
   private state: AppState = {
     gameId: null,
@@ -294,6 +295,7 @@ export class SillyChessApp {
       this.board.setPosition(this.state.fen);
       this.board.setInteractive(this.state.isGameActive && !this.state.isThinking);
       this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
+      this.updateEvaluation(this.state.fen);
       return;
     }
 
@@ -304,24 +306,26 @@ export class SillyChessApp {
       this.board.clearLastMove();
       this.board.setInteractive(false);
       this.setStatus('Start position (use → to step forward)');
+      this.updateEvaluation(this.START_FEN);
       return;
     }
 
     // View historical position after a specific move
     this.state.viewingHistoryIndex = moveIndex;
-    
+
     // Get the FEN for this position
     const historicalFen = moveIndex >= 0 && moveIndex < this.state.fenHistory.length
       ? this.state.fenHistory[moveIndex]
       : this.START_FEN;
-    
+
     this.board.setPosition(historicalFen);
     this.board.clearLastMove();
     this.board.setInteractive(false); // Can't move when viewing history
-    
+
     const moveNum = Math.floor(moveIndex / 2) + 1;
     const isWhiteMove = moveIndex % 2 === 0;
     this.setStatus(`Viewing move ${moveNum}${isWhiteMove ? '.' : '...'} (use → to continue)`);
+    this.updateEvaluation(historicalFen);
   }
 
   /**
@@ -843,17 +847,23 @@ export class SillyChessApp {
   /**
    * Update position evaluation
    */
-  private async updateEvaluation(): Promise<void> {
+  private async updateEvaluation(fen?: string): Promise<void> {
     if (!this.stockfish?.isReady()) {
       return;
     }
 
+    const fenToAnalyze = fen || this.state.fen;
+    const requestId = ++this.evalRequestId;
+
     try {
-      const analysis = await this.stockfish.analyze(this.state.fen, { depth: 12 });
+      const analysis = await this.stockfish.analyze(fenToAnalyze, { depth: 12 });
+
+      // Discard stale results if the user navigated to a different position
+      if (requestId !== this.evalRequestId) return;
 
       // Stockfish returns evaluation from side-to-move's perspective
       // Convert to white's perspective (positive = white advantage)
-      const isBlackToMove = this.state.turn === 'b';
+      const isBlackToMove = fenToAnalyze.split(' ')[1] === 'b';
 
       if (typeof analysis.evaluation === 'string') {
         // Mate score
