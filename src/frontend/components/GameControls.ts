@@ -6,6 +6,12 @@
 import { DifficultySlider } from './DifficultySlider';
 
 export type PlayerColor = 'white' | 'black';
+export type GameMode = 'vs-ai' | 'vs-player';
+
+export interface NewGameOptions {
+  color: PlayerColor;
+  mode: GameMode;
+}
 
 export class GameControls {
   private container: HTMLElement;
@@ -15,8 +21,9 @@ export class GameControls {
 
   private gameActive: boolean = false;
   private showCoordinates: boolean = true;
+  private selectedMode: GameMode = 'vs-ai';
 
-  private newGameCallbacks: Array<(color: PlayerColor) => void> = [];
+  private newGameCallbacks: Array<(options: NewGameOptions) => void> = [];
   private resignCallbacks: Array<() => void> = [];
   private hintCallbacks: Array<() => void> = [];
 
@@ -76,21 +83,38 @@ export class GameControls {
       <div class="modal-overlay"></div>
       <div class="modal-content">
         <h2 class="modal-title">New Game</h2>
-        <p class="modal-subtitle">Choose your color</p>
 
-        <div class="color-selection">
-          <button class="color-btn" data-color="white">
-            <span class="color-icon color-icon-white">&#9812;</span>
-            <span class="color-label">White</span>
-          </button>
-          <button class="color-btn" data-color="random">
-            <span class="color-icon">?</span>
-            <span class="color-label">Random</span>
-          </button>
-          <button class="color-btn" data-color="black">
-            <span class="color-icon color-icon-black">&#9812;</span>
-            <span class="color-label">Black</span>
-          </button>
+        <div class="modal-step modal-step-mode">
+          <p class="modal-subtitle">Choose game mode</p>
+          <div class="mode-selection">
+            <button class="mode-btn" data-mode="vs-ai">
+              <span class="mode-icon">🤖</span>
+              <span class="mode-label">vs Computer</span>
+            </button>
+            <button class="mode-btn" data-mode="vs-player">
+              <span class="mode-icon">👤</span>
+              <span class="mode-label">vs Human</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-step modal-step-color" style="display: none;">
+          <p class="modal-subtitle">Choose your color</p>
+          <div class="color-selection">
+            <button class="color-btn" data-color="white">
+              <span class="color-icon color-icon-white">&#9812;</span>
+              <span class="color-label">White</span>
+            </button>
+            <button class="color-btn" data-color="random">
+              <span class="color-icon">?</span>
+              <span class="color-label">Random</span>
+            </button>
+            <button class="color-btn" data-color="black">
+              <span class="color-icon color-icon-black">&#9812;</span>
+              <span class="color-label">Black</span>
+            </button>
+          </div>
+          <button class="modal-btn back-btn">Back</button>
         </div>
 
         <div class="modal-actions">
@@ -104,10 +128,26 @@ export class GameControls {
     // Add modal event listeners
     const overlay = this.modal.querySelector('.modal-overlay');
     const cancelBtn = this.modal.querySelector('.cancel-btn');
+    const backBtn = this.modal.querySelector('.back-btn');
+    const modeButtons = this.modal.querySelectorAll('.mode-btn');
     const colorButtons = this.modal.querySelectorAll('.color-btn');
+    const modeStep = this.modal.querySelector('.modal-step-mode') as HTMLElement;
+    const colorStep = this.modal.querySelector('.modal-step-color') as HTMLElement;
 
     overlay?.addEventListener('click', () => this.hideModal());
     cancelBtn?.addEventListener('click', () => this.hideModal());
+    backBtn?.addEventListener('click', () => {
+      colorStep.style.display = 'none';
+      modeStep.style.display = '';
+    });
+
+    modeButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.selectedMode = (btn as HTMLElement).dataset.mode as GameMode;
+        modeStep.style.display = 'none';
+        colorStep.style.display = '';
+      });
+    });
 
     colorButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -121,7 +161,7 @@ export class GameControls {
         }
 
         this.hideModal();
-        this.notifyNewGame(color);
+        this.notifyNewGame({ color, mode: this.selectedMode });
       });
     });
   }
@@ -363,6 +403,43 @@ export class GameControls {
         background: #5c6078;
       }
 
+      .mode-selection {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+
+      .mode-btn {
+        padding: 24px 16px;
+        background: #4a4e69;
+        color: #eee;
+        border: 2px solid transparent;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .mode-btn:hover {
+        background: #5c6078;
+        border-color: #829769;
+        transform: translateY(-4px);
+      }
+
+      .mode-icon {
+        font-size: 36px;
+      }
+
+      .back-btn {
+        margin-top: 12px;
+      }
+
       /* Settings Panel Styles */
       .settings-panel {
         position: fixed;
@@ -486,6 +563,11 @@ export class GameControls {
    */
   private showModal(): void {
     if (this.modal) {
+      // Reset to mode selection step
+      const modeStep = this.modal.querySelector('.modal-step-mode') as HTMLElement;
+      const colorStep = this.modal.querySelector('.modal-step-color') as HTMLElement;
+      if (modeStep) modeStep.style.display = '';
+      if (colorStep) colorStep.style.display = 'none';
       this.modal.style.display = 'block';
     }
   }
@@ -536,8 +618,8 @@ export class GameControls {
   /**
    * Notify new game callbacks
    */
-  private notifyNewGame(color: PlayerColor): void {
-    this.newGameCallbacks.forEach(callback => callback(color));
+  private notifyNewGame(options: NewGameOptions): void {
+    this.newGameCallbacks.forEach(callback => callback(options));
   }
 
   /**
@@ -576,7 +658,7 @@ export class GameControls {
   /**
    * Register new game callback
    */
-  public onNewGame(callback: (color: PlayerColor) => void): void {
+  public onNewGame(callback: (options: NewGameOptions) => void): void {
     this.newGameCallbacks.push(callback);
   }
 

@@ -9,6 +9,15 @@ async function makeMove(page: Page, from: string, to: string): Promise<void> {
 }
 
 /**
+ * Helper to start a new game vs CPU through the modal
+ */
+async function startGameVsCpu(page: Page, color: 'white' | 'black'): Promise<void> {
+  await page.getByRole('button', { name: /new game/i }).click();
+  await page.locator('.mode-btn[data-mode="vs-ai"]').click();
+  await page.locator(`.color-btn[data-color="${color}"]`).click();
+}
+
+/**
  * Bug fix and feature tests for Silly Chess
  */
 
@@ -23,8 +32,7 @@ test.describe('Bug Fixes', () => {
   // Skip on CI: Stockfish WASM is too slow and times out on GitHub runners
   test.skip('BUG-002: Resign should end the game', async ({ page }) => {
     // Start game as white
-    await page.getByRole('button', { name: /new game/i }).click();
-    await page.locator('.color-btn[data-color="white"]').click();
+    await startGameVsCpu(page, 'white');
     await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
     // Make a move first so resign is meaningful
@@ -47,8 +55,7 @@ test.describe('Bug Fixes', () => {
   // TODO: Fix hint clear timing - async Stockfish may complete after new game starts
   test.skip('BUG-003: Hint highlight should clear on New Game', async ({ page }) => {
     // Start game as white
-    await page.getByRole('button', { name: /new game/i }).click();
-    await page.locator('.color-btn[data-color="white"]').click();
+    await startGameVsCpu(page, 'white');
     await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
     // Click Hint to show a suggested move
@@ -58,8 +65,7 @@ test.describe('Bug Fixes', () => {
     await expect(page.locator('.square.hint')).toHaveCount(2, { timeout: 5000 });
 
     // Start a new game
-    await page.getByRole('button', { name: /new game/i }).click();
-    await page.locator('.color-btn[data-color="white"]').click();
+    await startGameVsCpu(page, 'white');
     // Status could be "Game started" or already "Your turn" depending on timing
     await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
@@ -70,8 +76,7 @@ test.describe('Bug Fixes', () => {
 
   test('BUG-005: Captured pieces section exists and has correct structure', async ({ page }) => {
     // Start game as white
-    await page.getByRole('button', { name: /new game/i }).click();
-    await page.locator('.color-btn[data-color="white"]').click();
+    await startGameVsCpu(page, 'white');
     await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
     // Verify the captures section exists with correct structure
@@ -91,8 +96,7 @@ test.describe('Bug Fixes', () => {
 
   test('BUG-004: Eval bar should show reasonable value at game start', async ({ page }) => {
     // Start game as white
-    await page.getByRole('button', { name: /new game/i }).click();
-    await page.locator('.color-btn[data-color="white"]').click();
+    await startGameVsCpu(page, 'white');
     await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
     // Wait a moment for eval to update
@@ -123,8 +127,7 @@ test.describe('Legal Move Indicators', () => {
 
   test('Legal move dots appear when selecting a piece', async ({ page }) => {
     // Start game as white
-    await page.getByRole('button', { name: /new game/i }).click();
-    await page.locator('.color-btn[data-color="white"]').click();
+    await startGameVsCpu(page, 'white');
     await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
     // Click on e2 pawn
@@ -141,8 +144,7 @@ test.describe('Legal Move Indicators', () => {
   // Skip on CI: Stockfish WASM is too slow and times out on GitHub runners
   test.skip('Capture indicators appear on squares with enemy pieces', async ({ page }) => {
     // Start game as white
-    await page.getByRole('button', { name: /new game/i }).click();
-    await page.locator('.color-btn[data-color="white"]').click();
+    await startGameVsCpu(page, 'white');
     await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
     // Play e4
@@ -177,8 +179,7 @@ test.describe('Legal Move Indicators', () => {
 
   test('Legal move indicators clear when clicking elsewhere', async ({ page }) => {
     // Start game as white
-    await page.getByRole('button', { name: /new game/i }).click();
-    await page.locator('.color-btn[data-color="white"]').click();
+    await startGameVsCpu(page, 'white');
     await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
     // Click on e2 pawn
@@ -206,8 +207,7 @@ test.describe('Move History Navigation', () => {
   // TODO: Fix history navigation feature - currently fenHistory is empty on reconnect
   test.skip('Can view previous positions without undoing moves', async ({ page }) => {
     // Start game as white
-    await page.getByRole('button', { name: /new game/i }).click();
-    await page.locator('.color-btn[data-color="white"]').click();
+    await startGameVsCpu(page, 'white');
     await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
     // Make move e2-e4
@@ -236,8 +236,7 @@ test.describe('Move History Navigation', () => {
   // TODO: Fix move list click handler data attributes
   test.skip('Can click on moves in move list to view positions', async ({ page }) => {
     // Start game as white
-    await page.getByRole('button', { name: /new game/i }).click();
-    await page.locator('.color-btn[data-color="white"]').click();
+    await startGameVsCpu(page, 'white');
     await expect(page.locator('#status-container')).toContainText(/Game started|Your turn/i, { timeout: 5000 });
 
     // Make move e2-e4

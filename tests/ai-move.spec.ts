@@ -28,10 +28,9 @@ test.describe('AI Move Tests', () => {
     const initialE2 = await page.locator('[data-square="e2"] .piece').count();
     expect(initialE2).toBe(1);
 
-    // Click "New Game" button to open modal
+    // Start game as white via modal (mode selection → color selection)
     await page.getByRole('button', { name: /new game/i }).click();
-
-    // Click "White" button in the modal to start game as white
+    await page.locator('.mode-btn[data-mode="vs-ai"]').click();
     await page.locator('.color-btn[data-color="white"]').click();
 
     // Verify game started
@@ -92,10 +91,9 @@ test.describe('AI Move Tests', () => {
     const initialWhitePiecesOn2 = await page.locator('[data-square$="2"] .piece.piece-white').count();
     expect(initialWhitePiecesOn2).toBe(8);
 
-    // Click "New Game" button to open modal
+    // Start game as black via modal (mode selection → color selection)
     await page.getByRole('button', { name: /new game/i }).click();
-
-    // Click "Black" button in the modal to start game as black
+    await page.locator('.mode-btn[data-mode="vs-ai"]').click();
     await page.locator('.color-btn[data-color="black"]').click();
 
     // Wait for AI to think (white moves first)

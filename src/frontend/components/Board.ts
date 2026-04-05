@@ -16,7 +16,7 @@ export interface BoardOptions {
   showCoordinates?: boolean;
 }
 
-type MoveCallback = (from: string, to: string) => void;
+type MoveCallback = (from: string, to: string, promotion?: string) => void;
 
 // Use the same filled symbols for both colors - we'll style with CSS
 const PIECE_SYMBOLS: Record<string, string> = {
@@ -255,7 +255,7 @@ export class ChessBoard {
   }
 
   /**
-   * Make a move
+   * Make a move (detects promotion and shows picker if needed)
    */
   private makeMove(from: string, to: string): void {
     this.deselectSquare();
@@ -263,10 +263,88 @@ export class ChessBoard {
     // Clear any previous move highlight - highlighting is only for selection preview
     this.lastMove = null;
 
+    // Check if this is a pawn promotion
+    const piece = this.fenPieces.get(from);
+    if (piece && piece.piece === 'p') {
+      const toRank = to[1];
+      const isPromotion = (piece.color === 'white' && toRank === '8') ||
+                          (piece.color === 'black' && toRank === '1');
+      if (isPromotion) {
+        this.showPromotionPicker(from, to, piece.color);
+        return;
+      }
+    }
+
     // Notify listeners
     this.moveCallbacks.forEach(callback => callback(from, to));
 
     this.render();
+  }
+
+  /**
+   * Show promotion piece picker overlay on the target square
+   */
+  private showPromotionPicker(from: string, to: string, color: Color): void {
+    // Remove any existing picker
+    this.removePromotionPicker();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'promotion-overlay';
+    overlay.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.removePromotionPicker();
+      this.render();
+    });
+
+    const picker = document.createElement('div');
+    picker.className = 'promotion-picker';
+
+    const pieces = [
+      { key: 'q', symbol: PIECE_SYMBOLS['Q'] },
+      { key: 'r', symbol: PIECE_SYMBOLS['R'] },
+      { key: 'b', symbol: PIECE_SYMBOLS['B'] },
+      { key: 'n', symbol: PIECE_SYMBOLS['N'] },
+    ];
+
+    for (const p of pieces) {
+      const btn = document.createElement('button');
+      btn.className = `promotion-piece piece-${color}`;
+      btn.textContent = p.symbol;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.removePromotionPicker();
+        this.moveCallbacks.forEach(callback => callback(from, to, p.key));
+        this.render();
+      });
+      picker.appendChild(btn);
+    }
+
+    // Position the picker near the target square
+    const targetSquare = this.getSquareElement(to);
+    if (targetSquare) {
+      const rect = targetSquare.getBoundingClientRect();
+      const boardRect = this.boardElement.getBoundingClientRect();
+      const left = rect.left - boardRect.left;
+      const isTopHalf = rect.top - boardRect.top < boardRect.height / 2;
+      picker.style.left = `${left}px`;
+      if (isTopHalf) {
+        picker.style.top = `${rect.top - boardRect.top}px`;
+      } else {
+        picker.style.bottom = `${boardRect.bottom - rect.bottom}px`;
+      }
+    }
+
+    overlay.appendChild(picker);
+    this.boardElement.style.position = 'relative';
+    this.boardElement.appendChild(overlay);
+  }
+
+  /**
+   * Remove promotion picker if present
+   */
+  private removePromotionPicker(): void {
+    const existing = this.boardElement.querySelector('.promotion-overlay');
+    if (existing) existing.remove();
   }
 
   /**
@@ -321,7 +399,7 @@ export class ChessBoard {
       if (toSquare) toSquare.classList.add('last-move');
     }
 
-    // Highlight check (only if we have engine with status)
+    // Highlight check
     if (this.engine) {
       const status = this.engine.getStatus();
       if (status.isCheck) {
@@ -333,6 +411,25 @@ export class ChessBoard {
             squareElement.classList.add('in-check');
           }
         }
+      }
+    } else {
+      // FEN mode: detect check using chess.js
+      try {
+        const chess = new Chess(this.currentFen);
+        if (chess.isCheck()) {
+          const turn: Color = chess.turn() === 'w' ? 'white' : 'black';
+          for (const [square, piece] of this.fenPieces.entries()) {
+            if (piece.piece === 'k' && piece.color === turn) {
+              const squareElement = this.getSquareElement(square);
+              if (squareElement) {
+                squareElement.classList.add('in-check');
+              }
+              break;
+            }
+          }
+        }
+      } catch {
+        // Invalid FEN, skip check detection
       }
     }
 
