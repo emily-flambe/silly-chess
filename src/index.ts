@@ -468,6 +468,32 @@ app.post('/api/explain', async (c) => {
   }
 });
 
+// Proxy for ChessGrammar API (avoids CORS issues from browser)
+app.get('/api/tactics', async (c) => {
+  const fen = c.req.query('fen');
+  if (!fen) {
+    return c.json({ error: 'Missing fen parameter' }, 400);
+  }
+
+  try {
+    const response = await fetch('https://chessgrammar.com/api/v1/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fen, depth: 'l1' }),
+    });
+
+    if (!response.ok) {
+      return c.json({ error: 'ChessGrammar API error', status: response.status }, response.status as 400);
+    }
+
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    console.error('ChessGrammar proxy error:', error);
+    return c.json({ error: 'Failed to reach ChessGrammar API' }, 502);
+  }
+});
+
 // SPA fallback for client-side routing (e.g., /game/:id)
 app.get('/game/*', async (c) => {
   // Serve index.html for game routes so client-side router can handle them
