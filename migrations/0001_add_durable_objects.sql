@@ -30,22 +30,9 @@ CREATE TABLE IF NOT EXISTS moves (
   FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
 );
 
--- Evaluations table for deeper analysis (optional)
-CREATE TABLE IF NOT EXISTS evaluations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  game_id TEXT NOT NULL,
-  move_number INTEGER NOT NULL,
-  depth INTEGER,
-  nodes INTEGER,
-  pv TEXT,                           -- Principal variation (space-separated moves)
-  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-  FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
-);
-
 -- Indexes for efficient queries
 CREATE INDEX IF NOT EXISTS idx_moves_game ON moves(game_id);
 CREATE INDEX IF NOT EXISTS idx_moves_game_number ON moves(game_id, move_number);
-CREATE INDEX IF NOT EXISTS idx_evaluations_game ON evaluations(game_id);
 
 -- Update existing games to have ai_elo from opponent_elo
 UPDATE games SET ai_elo = opponent_elo WHERE ai_elo IS NULL;

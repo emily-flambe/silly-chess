@@ -5,7 +5,7 @@
  */
 
 import { Chess } from 'chess.js';
-import type { Move, PieceType } from '../../types';
+import type { PieceType } from '../../types';
 
 // Unicode chess piece symbols (filled style)
 const PIECE_SYMBOLS: Record<PieceType, string> = {
@@ -32,7 +32,6 @@ type PositionSelectCallback = (moveIndex: number) => void;
 export class MoveList {
   private container: HTMLElement;
   private listElement: HTMLElement;
-  private moves: Move[] = [];
   private positionSelectCallbacks: PositionSelectCallback[] = [];
   private viewingMoveIndex: number = -1; // -1 = viewing current position
 
@@ -70,10 +69,10 @@ export class MoveList {
         <button class="nav-btn nav-last" title="Current (↓)">⏭</button>
       </div>
     `;
-    
+
     // Attach navigation event listeners
     setTimeout(() => this.attachNavListeners(), 0);
-    
+
     return wrapper;
   }
 
@@ -307,28 +306,11 @@ export class MoveList {
   }
 
   /**
-   * Update the move list with new moves
-   */
-  update(moves: Move[]): void {
-    this.moves = moves;
-    this.render();
-  }
-
-  /**
-   * Add a single move (for efficiency when appending)
-   */
-  addMove(move: Move): void {
-    this.moves.push(move);
-    this.render();
-  }
-
-  /**
    * Clear all moves
    */
   clear(): void {
-    this.moves = [];
     this.sanMoves = [];
-    this.render();
+    this.renderFromSAN();
   }
 
   // Simple SAN storage for server mode
@@ -339,8 +321,6 @@ export class MoveList {
    */
   updateFromSAN(sanMoves: string[]): void {
     this.sanMoves = sanMoves;
-    // Clear Move objects - we'll render directly from SAN
-    this.moves = [];
     this.renderFromSAN();
   }
 
@@ -415,11 +395,11 @@ export class MoveList {
     } else {
       this.viewingMoveIndex = Math.max(-2, Math.min(moveIndex, maxIndex));
     }
-    
+
     // Update highlighting
     this.updateViewingHighlight();
     this.updateNavButtons();
-    
+
     // Notify listeners
     this.positionSelectCallbacks.forEach(cb => cb(this.viewingMoveIndex));
   }
@@ -466,7 +446,7 @@ export class MoveList {
    */
   goBack(): void {
     if (this.sanMoves.length === 0) return;
-    
+
     // If at current (-1), go to the second-to-last move (one step back from current)
     // Note: -1 and (length-1) are the same visual position, so we need to go to length-2
     if (this.viewingMoveIndex === -1) {
@@ -477,7 +457,7 @@ export class MoveList {
         // Go to second-to-last move (one step back)
         this.selectPosition(this.sanMoves.length - 2);
       }
-    } 
+    }
     // If at start (-2), do nothing
     else if (this.viewingMoveIndex === -2) {
       return;
@@ -497,7 +477,7 @@ export class MoveList {
    */
   goForward(): void {
     if (this.sanMoves.length === 0) return;
-    
+
     // If at start position, go to first move
     if (this.viewingMoveIndex === -2) {
       this.selectPosition(0);
@@ -569,104 +549,6 @@ export class MoveList {
   }
 
   /**
-   * Render the move list
-   */
-  private render(): void {
-    const content = this.listElement.querySelector('.move-list-content');
-    if (!content) return;
-
-    // Render captured pieces
-    this.renderCapturedPieces();
-
-    if (this.moves.length === 0) {
-      content.innerHTML = '<div class="move-list-empty">No moves yet</div>';
-      return;
-    }
-
-    let html = '';
-    const totalMoves = this.moves.length;
-
-    // Group moves into pairs (white, black)
-    for (let i = 0; i < this.moves.length; i += 2) {
-      const moveNumber = Math.floor(i / 2) + 1;
-      const whiteMove = this.moves[i];
-      const blackMove = this.moves[i + 1];
-
-      const isLatestWhite = i === totalMoves - 1;
-      const isLatestBlack = i + 1 === totalMoves - 1;
-
-      html += `
-        <div class="move-row">
-          <span class="move-number">${moveNumber}.</span>
-          <span class="move-white ${isLatestWhite ? 'move-latest' : ''}">${this.formatMove(whiteMove)}</span>
-          <span class="move-black ${isLatestBlack ? 'move-latest' : ''}">${blackMove ? this.formatMove(blackMove) : ''}</span>
-        </div>
-      `;
-    }
-
-    content.innerHTML = html;
-
-    // Auto-scroll to bottom
-    content.scrollTop = content.scrollHeight;
-  }
-
-  /**
-   * Format a move for display
-   */
-  private formatMove(move: Move): string {
-    // Use SAN notation if available, otherwise construct from from/to
-    let notation = move.san || `${move.from}${move.to}`;
-
-    // Add check/checkmate indicators if not already present
-    if (move.flags.isCheckmate && !notation.includes('#')) {
-      notation += '#';
-    } else if (move.flags.isCheck && !notation.includes('+')) {
-      notation += '+';
-    }
-
-    return notation;
-  }
-
-  /**
-   * Render captured pieces for each side
-   */
-  private renderCapturedPieces(): void {
-    const whiteCapturesContainer = this.listElement.querySelector('.captured-pieces[data-side="white"]');
-    const blackCapturesContainer = this.listElement.querySelector('.captured-pieces[data-side="black"]');
-
-    if (!whiteCapturesContainer || !blackCapturesContainer) return;
-
-    // Collect captured pieces by side
-    const capturedByWhite: PieceType[] = []; // Black pieces captured by white
-    const capturedByBlack: PieceType[] = []; // White pieces captured by black
-
-    this.moves.forEach((move, index) => {
-      if (move.captured) {
-        // Even index = white's move, odd index = black's move
-        if (index % 2 === 0) {
-          capturedByWhite.push(move.captured);
-        } else {
-          capturedByBlack.push(move.captured);
-        }
-      }
-    });
-
-    // Sort by value (highest first)
-    const sortByValue = (a: PieceType, b: PieceType) => PIECE_VALUES[b] - PIECE_VALUES[a];
-    capturedByWhite.sort(sortByValue);
-    capturedByBlack.sort(sortByValue);
-
-    // Render captured pieces
-    whiteCapturesContainer.innerHTML = capturedByWhite
-      .map(p => `<span class="captured-piece captured-piece-black">${PIECE_SYMBOLS[p]}</span>`)
-      .join('');
-
-    blackCapturesContainer.innerHTML = capturedByBlack
-      .map(p => `<span class="captured-piece captured-piece-white">${PIECE_SYMBOLS[p]}</span>`)
-      .join('');
-  }
-
-  /**
    * Render captured pieces by replaying SAN moves with chess.js
    * Used in server mode when we only have SAN notation
    */
@@ -682,7 +564,7 @@ export class MoveList {
 
     if (this.sanMoves.length > 0) {
       const chess = new Chess();
-      
+
       for (let i = 0; i < this.sanMoves.length; i++) {
         const san = this.sanMoves[i];
         try {
@@ -717,12 +599,5 @@ export class MoveList {
     blackCapturesContainer.innerHTML = capturedByBlack
       .map(p => `<span class="captured-piece captured-piece-white">${PIECE_SYMBOLS[p]}</span>`)
       .join('');
-  }
-
-  /**
-   * Get current move count
-   */
-  getMoveCount(): number {
-    return this.moves.length;
   }
 }
