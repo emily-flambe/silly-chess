@@ -5,7 +5,7 @@
  * All queries use parameterized statements for security.
  */
 
-import type { User, Game, GameResult } from '../types';
+import type { User, Game } from '../types';
 
 // User Query Functions
 
@@ -105,86 +105,6 @@ export async function updateUserPreferences(
 // Game Query Functions
 
 /**
- * Create a new game
- * @param db D1Database instance
- * @param gameId Unique game identifier (UUID)
- * @param userId User identifier (can be null for anonymous)
- * @param opponentElo Opponent's ELO rating
- * @returns The created game object
- */
-export async function createGame(
-  db: D1Database,
-  gameId: string,
-  userId: string | null,
-  opponentElo: number
-): Promise<Game> {
-  const now = Math.floor(Date.now() / 1000);
-  const initialPgn = ''; // Empty PGN for new game
-  const inProgressResult: GameResult = '*';
-
-  const result = await db.prepare(
-    'INSERT INTO games (id, user_id, pgn, result, opponent_elo, created_at, ended_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(gameId, userId, initialPgn, inProgressResult, opponentElo, now, null).run();
-
-  if (!result.success) {
-    throw new Error('Failed to create game');
-  }
-
-  return {
-    id: gameId,
-    user_id: userId,
-    pgn: initialPgn,
-    result: inProgressResult,
-    opponent_elo: opponentElo,
-    created_at: now,
-    ended_at: null
-  };
-}
-
-/**
- * Update game state (PGN and optionally result)
- * @param db D1Database instance
- * @param gameId Game identifier
- * @param pgn Updated PGN string
- * @param result Optional game result
- * @returns Updated game object or null if game not found
- */
-export async function updateGame(
-  db: D1Database,
-  gameId: string,
-  pgn: string,
-  result?: GameResult
-): Promise<Game | null> {
-  const updates: string[] = ['pgn = ?'];
-  const values: (string | number)[] = [pgn];
-
-  if (result !== undefined) {
-    updates.push('result = ?');
-    values.push(result);
-
-    // If result is not in progress, set ended_at
-    if (result !== '*') {
-      updates.push('ended_at = ?');
-      values.push(Math.floor(Date.now() / 1000));
-    }
-  }
-
-  // Add gameId for WHERE clause
-  values.push(gameId);
-
-  const updateResult = await db.prepare(
-    `UPDATE games SET ${updates.join(', ')} WHERE id = ?`
-  ).bind(...values).run();
-
-  if (updateResult.meta.changes === 0) {
-    return null;
-  }
-
-  // Fetch and return the updated game
-  return getGame(db, gameId);
-}
-
-/**
  * Get game by ID
  * @param db D1Database instance
  * @param gameId Game identifier
@@ -220,32 +140,3 @@ export async function listGames(
   return results || [];
 }
 
-/**
- * End a game with a final result
- * @param db D1Database instance
- * @param gameId Game identifier
- * @param result Final game result ('1-0', '0-1', '1/2-1/2')
- * @returns Updated game object or null if game not found
- */
-export async function endGame(
-  db: D1Database,
-  gameId: string,
-  result: GameResult
-): Promise<Game | null> {
-  if (result === '*') {
-    throw new Error('Cannot end game with in-progress result');
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-
-  const updateResult = await db.prepare(
-    'UPDATE games SET result = ?, ended_at = ? WHERE id = ?'
-  ).bind(result, now, gameId).run();
-
-  if (updateResult.meta.changes === 0) {
-    return null;
-  }
-
-  // Fetch and return the updated game
-  return getGame(db, gameId);
-}
