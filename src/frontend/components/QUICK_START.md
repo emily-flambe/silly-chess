@@ -55,11 +55,11 @@ That's it! The component is fully functional.
 
 ```typescript
 import { GameControls } from './components/GameControls';
-import { StockfishWorker } from '../lib/stockfish/StockfishWorker';
+import { FairyStockfishClient } from '../lib/stockfish/FairyStockfishClient';
 
 // Initialize components
 const controls = new GameControls(document.getElementById('game-controls'));
-const stockfish = new StockfishWorker();
+const stockfish = new FairyStockfishClient();
 
 // Initialize Stockfish
 await stockfish.initialize();

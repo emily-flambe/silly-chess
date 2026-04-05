@@ -106,14 +106,14 @@ console.log('Sound enabled:', prefs.soundEnabled);
 
 ```typescript
 import { GameControls } from './components/GameControls';
-import { StockfishWorker } from '../lib/stockfish/StockfishWorker';
+import { FairyStockfishClient } from '../lib/stockfish/FairyStockfishClient';
 
 // Initialize components
 const controlsContainer = document.getElementById('game-controls');
 const controls = new GameControls(controlsContainer);
 
 // Initialize Stockfish
-const stockfish = new StockfishWorker();
+const stockfish = new FairyStockfishClient();
 await stockfish.initialize();
 
 // Access difficulty slider and sync with Stockfish

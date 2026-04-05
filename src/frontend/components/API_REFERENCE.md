@@ -175,14 +175,14 @@ type PlayerColor = 'white' | 'black';
 
 ```typescript
 import { GameControls } from './components/GameControls';
-import { StockfishWorker } from '../lib/stockfish/StockfishWorker';
+import { FairyStockfishClient } from '../lib/stockfish/FairyStockfishClient';
 
 // Initialize controls
 const container = document.getElementById('game-controls');
 const controls = new GameControls(container);
 
 // Initialize Stockfish
-const stockfish = new StockfishWorker();
+const stockfish = new FairyStockfishClient();
 await stockfish.initialize();
 
 // Get difficulty slider and sync with Stockfish

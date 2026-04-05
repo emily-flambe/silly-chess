@@ -29,10 +29,10 @@ const evalBar = new EvalBar(container);
 
 ```typescript
 import { EvalBar } from './components/EvalBar';
-import { StockfishWorker } from '../lib/stockfish/StockfishWorker';
+import { FairyStockfishClient } from '../lib/stockfish/FairyStockfishClient';
 
 const evalBar = new EvalBar(container);
-const stockfish = new StockfishWorker();
+const stockfish = new FairyStockfishClient();
 
 await stockfish.initialize();
 

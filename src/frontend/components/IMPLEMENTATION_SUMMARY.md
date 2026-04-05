@@ -219,7 +219,7 @@ GameControls
 ### With Stockfish
 ```typescript
 // Initialize
-const stockfish = new StockfishWorker();
+const stockfish = new FairyStockfishClient();
 await stockfish.initialize();
 
 // Sync Elo
