@@ -8,7 +8,7 @@ The frontend uses vanilla TypeScript with no framework dependencies. Components 
 
 ### ChessBoard (`src/frontend/components/Board.ts`)
 
-Interactive chess board with click-to-move interaction.
+Interactive chess board with click-to-move interaction. Operates in FEN-based server-authoritative mode.
 
 ```typescript
 const board = new ChessBoard(container, {
@@ -17,12 +17,15 @@ const board = new ChessBoard(container, {
   showCoordinates: true,
 });
 
-board.setEngine(engine);
+board.setPosition(fen);    // Set position from FEN string
 board.onMove((from, to) => { /* handle move */ });
 board.flip();
+board.unflip();
 board.setInteractive(false);
-board.highlightSquares(['e4', 'e5'], '#ff0000');
-board.clearHighlights();
+board.setLastMove(from, to);
+board.clearLastMove();
+board.showHint(from, to);
+board.clearHint();
 board.destroy();
 ```
 
@@ -33,6 +36,7 @@ board.destroy();
 - Legal move highlighting (dots for empty, rings for captures)
 - Last move highlighting
 - Check highlighting with pulse animation
+- Pawn promotion picker
 - Touch support for mobile
 
 **Colors** (Lichess-inspired):
@@ -51,18 +55,15 @@ const controls = new GameControls(container);
 
 controls.onNewGame((color) => { /* 'white' | 'black' */ });
 controls.onResign(() => { /* handle resign */ });
-controls.onUndo(() => { /* handle undo */ });
 
 controls.setGameActive(true);
-controls.setCanUndo(true);
 controls.getDifficultySlider();
 controls.getPreferences();
 ```
 
 **UI Elements**:
-- New Game button (opens modal with color choice)
+- New Game button (opens modal with mode + color choice)
 - Resign button (disabled when no game active)
-- Undo button (disabled when no moves to undo)
 - Settings button (opens settings panel)
 
 ### DifficultySlider (`src/frontend/components/DifficultySlider.ts`)
@@ -108,6 +109,24 @@ evalBar.setVisible(true);
 - Smooth CSS transitions (400ms)
 - Sigmoid scaling (capped at ~90% for extreme advantages)
 
+### MoveList (`src/frontend/components/MoveList.ts`)
+
+Move list with captured pieces and history navigation.
+
+```typescript
+const moveList = new MoveList(container);
+
+moveList.updateFromSAN(['e4', 'e5', 'Nf3']);  // Update from SAN array
+moveList.clear();                               // Reset
+moveList.onPositionSelect((index) => { });      // History navigation callback
+moveList.goBack();
+moveList.goForward();
+moveList.goToStart();
+moveList.goToEnd();
+moveList.isViewingHistory();
+moveList.getViewingIndex();
+```
+
 ## Styling (`src/frontend/styles.css`)
 
 Global styles for chess board and components.
@@ -127,8 +146,9 @@ Global styles for chess board and components.
 ## Main Application (`src/frontend/app.ts`)
 
 Orchestrates all components:
-1. Initializes ChessEngine, StockfishWorker, UI components
-2. Wires event handlers between components
-3. Manages game loop (player move -> AI move)
-4. Updates evaluation after each move
-5. Handles game end conditions
+1. Initializes FairyStockfishClient and UI components
+2. Creates/joins games via Durable Object API
+3. Wires event handlers between components
+4. Manages game loop (player move -> server validation -> AI move)
+5. Updates evaluation after each move
+6. Handles game end conditions

@@ -219,20 +219,6 @@ Error (wrong turn):
 }
 ```
 
-#### End Game
-```
-POST /api/games/:id/end
-```
-
-Request:
-```json
-{
-  "result": "1-0"
-}
-```
-
-Valid results: `"1-0"` (white wins), `"0-1"` (black wins), `"1/2-1/2"` (draw)
-
 ## Database Schema
 
 ```sql
@@ -263,12 +249,9 @@ createUser(db, userId, displayName?)
 getUser(db, userId)
 updateUserPreferences(db, userId, { preferred_elo?, display_name? })
 
-// Game operations
-createGame(db, gameId, userId, opponentElo)
-updateGame(db, gameId, pgn, result?)
+// Game operations (read-only; writes happen via Durable Object)
 getGame(db, gameId)
 listGames(db, userId, limit?)
-endGame(db, gameId, result)
 ```
 
 ## Authentication

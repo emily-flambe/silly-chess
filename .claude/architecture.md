@@ -27,11 +27,8 @@
 - **styles.css**: Board and component styling
 
 ### Core Logic Layer (`src/lib/`)
-- **chess-engine/**: Chess logic wrapper around chess.js
-  - Extensible interfaces for future variant support
-  - Board state, piece definitions, move validation, rules
 - **stockfish/**: AI opponent integration
-  - Web Worker wrapper for Stockfish WASM
+  - FairyStockfishClient: WASM-based Stockfish via Web Worker
   - UCI protocol implementation
   - Elo-based difficulty adjustment
 
@@ -45,26 +42,23 @@
 
 ### Game Loop
 1. User clicks "New Game" -> GameControls emits event
-2. App creates ChessEngine instance, resets board
-3. If playing black, App calls StockfishWorker.getBestMove()
+2. App creates game via Durable Object, board renders from FEN
+3. If playing black, App calls FairyStockfishClient for AI move
 4. User makes move -> Board emits move event
-5. App validates via ChessEngine.move()
-6. App updates EvalBar via StockfishWorker.analyze()
-7. App triggers AI move via StockfishWorker.getBestMove()
+5. App sends move to DO via WebSocket/REST, DO validates with chess.js
+6. App updates EvalBar via FairyStockfishClient.analyze()
+7. App triggers AI move via FairyStockfishClient
 8. Repeat until checkmate/stalemate/resign
 
 ### Persistence Flow
-1. Game starts -> POST /api/games creates record
-2. After each move -> PUT /api/games/:id updates PGN
-3. Game ends -> POST /api/games/:id/end sets result
+1. Game starts -> POST /api/games creates DO + D1 record
+2. After each move -> DO updates internal state + persists to D1
+3. Game ends -> DO sets final status in D1
 
 ## Key Design Decisions
 
-### Extensibility for Variants
-The chess engine uses interfaces (`PieceDefinition`, `RuleSet`, `BoardState`) that can be swapped out for custom variants. Currently wraps chess.js but designed for future custom implementations.
-
 ### Stockfish in Web Worker
-Stockfish runs in a Web Worker to prevent blocking the UI thread. Communication uses UCI protocol via postMessage.
+Fairy-Stockfish runs in a Web Worker to prevent blocking the UI thread. Communication uses UCI protocol via postMessage.
 
 ### Vanilla TypeScript
 No React/Vue to keep the bundle small and dependencies minimal. Components use class-based patterns with DOM manipulation.

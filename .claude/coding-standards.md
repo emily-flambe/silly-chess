@@ -28,8 +28,8 @@ type User = {
 
 ### Naming Conventions
 - **Files**: PascalCase for classes (`Board.ts`), camelCase for utilities (`queries.ts`)
-- **Classes**: PascalCase (`ChessEngine`, `StockfishWorker`)
-- **Functions**: camelCase (`createGame`, `getBestMove`)
+- **Classes**: PascalCase (`ChessBoard`, `FairyStockfishClient`)
+- **Functions**: camelCase (`getGame`, `getBestMove`)
 - **Constants**: UPPER_SNAKE_CASE (`MAX_ELO`, `STORAGE_KEY`)
 - **Interfaces**: PascalCase, no `I` prefix (`BoardState`, not `IBoardState`)
 
@@ -43,8 +43,7 @@ type User = {
 import { Hono } from 'hono';
 
 // Internal
-import { ChessEngine } from '../lib/chess-engine';
-import { StockfishWorker } from '../lib/stockfish';
+import { FairyStockfishClient } from '../lib/stockfish';
 
 // Types
 import type { Env, GameResult } from './types';
@@ -179,4 +178,4 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - `test`: Tests
 
 ### Scope
-- `chess-engine`, `stockfish`, `frontend`, `api`, `db`
+- `stockfish`, `frontend`, `api`, `db`, `durable-objects`
