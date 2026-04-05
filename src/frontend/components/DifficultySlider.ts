@@ -122,7 +122,7 @@ export class DifficultySlider {
 
       .slider-label {
         font-size: 12px;
-        color: #888;
+        color: #9a9eb1;
         min-width: 40px;
         text-align: center;
       }
