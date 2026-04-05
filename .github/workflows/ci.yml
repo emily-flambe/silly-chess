@@ -27,6 +27,8 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+      - name: Create dist directory for wrangler config
+        run: mkdir -p dist
       - name: Run Vitest backend tests
         run: npm test
 
