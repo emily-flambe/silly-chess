@@ -58,7 +58,8 @@ export class FairyStockfishClient {
             this.isInitialized = true;
             this.setupMessageHandler();
 
-            // Set default Elo
+            // Enable WDL display, then set default Elo
+            this.sendCommand('setoption name UCI_ShowWDL value true');
             this.setElo(this.currentElo).then(() => {
               resolve();
             }).catch(reject);
@@ -284,6 +285,8 @@ export class FairyStockfishClient {
     evaluation: number | string;
     depth: number;
     winChance: number;
+    pv?: string[];
+    wdl?: { win: number; draw: number; loss: number };
   }> {
     const depth = options?.depth ?? 12;
 
@@ -296,6 +299,8 @@ export class FairyStockfishClient {
       let evaluation: number | string = 0;
       let bestMove = '';
       let actualDepth = depth;
+      let pv: string[] | undefined;
+      let wdl: { win: number; draw: number; loss: number } | undefined;
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
       let settled = false;
 
@@ -327,13 +332,29 @@ export class FairyStockfishClient {
           if (depthMatch) {
             actualDepth = parseInt(depthMatch[1], 10);
           }
+
+          // Parse WDL (win/draw/loss milliprobabilities)
+          const wdlMatch = msg.match(/wdl (\d+) (\d+) (\d+)/);
+          if (wdlMatch) {
+            wdl = {
+              win: parseInt(wdlMatch[1], 10) / 10,
+              draw: parseInt(wdlMatch[2], 10) / 10,
+              loss: parseInt(wdlMatch[3], 10) / 10,
+            };
+          }
+
+          // Parse PV (principal variation)
+          const pvMatch = msg.match(/ pv (.+)/);
+          if (pvMatch) {
+            pv = pvMatch[1].trim().split(/\s+/);
+          }
         }
 
         if (msg.startsWith('bestmove')) {
           if (settled) return;
           settled = true;
           cleanup();
-          
+
           bestMove = msg.split(' ')[1] || '';
 
           const evalNum = typeof evaluation === 'number' ? evaluation : 0;
@@ -344,6 +365,8 @@ export class FairyStockfishClient {
             evaluation,
             depth: actualDepth,
             winChance: Math.max(0, Math.min(100, winChance)),
+            pv,
+            wdl,
           });
         }
       };
@@ -359,6 +382,113 @@ export class FairyStockfishClient {
         cleanup();
         reject(new Error('Analysis timeout'));
       }, 5000); // Reduced from 30s - evaluation is optional
+    });
+  }
+
+  /**
+   * Analyze position with multiple principal variations (MultiPV)
+   * Returns the top N lines ranked by engine evaluation
+   */
+  async analyzeMultiPV(
+    fen: string,
+    options?: { depth?: number; lines?: number }
+  ): Promise<Array<{
+    rank: number;
+    evaluation: number | string;
+    pv: string[];
+    wdl?: { win: number; draw: number; loss: number };
+  }>> {
+    const depth = options?.depth ?? 12;
+    const lines = options?.lines ?? 3;
+
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        reject(new Error('Worker not initialized'));
+        return;
+      }
+
+      const results = new Map<number, {
+        rank: number;
+        evaluation: number | string;
+        pv: string[];
+        wdl?: { win: number; draw: number; loss: number };
+      }>();
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      let settled = false;
+
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        this.worker?.removeEventListener('message', multiPvHandler);
+      };
+
+      const multiPvHandler = (event: MessageEvent) => {
+        const msg = String(event.data);
+
+        if (msg.startsWith('info') && msg.includes('score') && msg.includes('multipv')) {
+          const multipvMatch = msg.match(/multipv (\d+)/);
+          const cpMatch = msg.match(/score cp (-?\d+)/);
+          const mateMatch = msg.match(/score mate (-?\d+)/);
+          const pvMatch = msg.match(/ pv (.+)/);
+          const wdlMatch = msg.match(/wdl (\d+) (\d+) (\d+)/);
+
+          if (multipvMatch) {
+            const rank = parseInt(multipvMatch[1], 10);
+            let evaluation: number | string = 0;
+
+            if (mateMatch) {
+              const mateIn = parseInt(mateMatch[1], 10);
+              evaluation = `M${Math.abs(mateIn)}`;
+              if (mateIn < 0) evaluation = `-${evaluation}`;
+            } else if (cpMatch) {
+              evaluation = parseInt(cpMatch[1], 10);
+            }
+
+            const pv = pvMatch ? pvMatch[1].trim().split(/\s+/) : [];
+            let wdl: { win: number; draw: number; loss: number } | undefined;
+            if (wdlMatch) {
+              wdl = {
+                win: parseInt(wdlMatch[1], 10) / 10,
+                draw: parseInt(wdlMatch[2], 10) / 10,
+                loss: parseInt(wdlMatch[3], 10) / 10,
+              };
+            }
+
+            results.set(rank, { rank, evaluation, pv, wdl });
+          }
+        }
+
+        if (msg.startsWith('bestmove')) {
+          if (settled) return;
+          settled = true;
+          cleanup();
+
+          // Reset MultiPV back to 1 so normal play isn't affected
+          this.sendCommand('setoption name MultiPV value 1');
+
+          // Sort by rank and return
+          const sorted = Array.from(results.values()).sort((a, b) => a.rank - b.rank);
+          resolve(sorted);
+        }
+      };
+
+      this.worker.addEventListener('message', multiPvHandler);
+
+      // Set MultiPV, position, and start search
+      this.sendCommand(`setoption name MultiPV value ${lines}`);
+      this.sendCommand(`position fen ${fen}`);
+      this.sendCommand(`go depth ${depth}`);
+
+      timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        // Reset MultiPV even on timeout
+        this.sendCommand('setoption name MultiPV value 1');
+        reject(new Error('MultiPV analysis timeout'));
+      }, 10000);
     });
   }
 

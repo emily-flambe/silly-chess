@@ -169,6 +169,23 @@ export class EvalBar {
   }
 
   /**
+   * Set evaluation using WDL (Win/Draw/Loss) percentages
+   * When available, shows win% instead of centipawns and uses it for bar fill
+   */
+  public setWDL(win: number, draw: number, loss: number): void {
+    // win/draw/loss are percentages 0-100
+    // Bar fill = win% (white winning probability)
+    const whitePercent = Math.max(2, Math.min(98, win));
+    this.updateBarHeights(whitePercent);
+
+    // Display win% as the text
+    this.evalText.textContent = `${Math.round(win)}%`;
+
+    // Pick text color based on which section is behind the midpoint
+    this.evalText.style.color = whitePercent > 50 ? '#333' : '#fff';
+  }
+
+  /**
    * Handle evaluation from Stockfish analysis
    * Handles both number (centipawns) and string ("M3") formats
    */

@@ -6,6 +6,8 @@
 
 import { Chess } from 'chess.js';
 import type { PieceType } from '../../types';
+import type { MoveClassification } from '../utils/moveClassification';
+import { CLASSIFICATION_COLORS } from '../utils/moveClassification';
 
 // Unicode chess piece symbols (filled style)
 const PIECE_SYMBOLS: Record<PieceType, string> = {
@@ -315,11 +317,21 @@ export class MoveList {
    */
   clear(): void {
     this.sanMoves = [];
+    this.classifications = [];
+    this.renderFromSAN();
+  }
+
+  /**
+   * Set move classifications and re-render with color coding
+   */
+  setClassifications(classifications: (MoveClassification | null)[]): void {
+    this.classifications = classifications;
     this.renderFromSAN();
   }
 
   // Simple SAN storage for server mode
   private sanMoves: string[] = [];
+  private classifications: (MoveClassification | null)[] = [];
 
   /**
    * Update from SAN notation array (server mode)
@@ -360,11 +372,18 @@ export class MoveList {
       const isViewingWhite = i === viewingIndex;
       const isViewingBlack = i + 1 === viewingIndex;
 
+      const whiteClass = this.classifications[i] || null;
+      const blackClass = this.classifications[i + 1] || null;
+      const whiteStyle = whiteClass ? ` style="color: ${CLASSIFICATION_COLORS[whiteClass]}"` : '';
+      const blackStyle = blackClass ? ` style="color: ${CLASSIFICATION_COLORS[blackClass]}"` : '';
+      const whiteCssClass = whiteClass ? ` move-${whiteClass}` : '';
+      const blackCssClass = blackClass ? ` move-${blackClass}` : '';
+
       html += `
         <div class="move-row">
           <span class="move-number">${moveNumber}.</span>
-          <span class="move-white ${isViewingWhite ? 'move-viewing' : ''}" data-move-index="${i}">${whiteMove || ''}</span>
-          <span class="move-black ${isViewingBlack ? 'move-viewing' : ''}" ${blackMove ? `data-move-index="${i + 1}"` : ''}>${blackMove || ''}</span>
+          <span class="move-white${whiteCssClass} ${isViewingWhite ? 'move-viewing' : ''}" data-move-index="${i}"${whiteStyle}>${whiteMove || ''}</span>
+          <span class="move-black${blackCssClass} ${isViewingBlack ? 'move-viewing' : ''}" ${blackMove ? `data-move-index="${i + 1}"` : ''}${blackStyle}>${blackMove || ''}</span>
         </div>
       `;
     }
