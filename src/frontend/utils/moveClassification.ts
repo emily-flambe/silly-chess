@@ -1,7 +1,7 @@
 /**
  * Move Classification Utility
  *
- * Classifies chess moves by comparing win probability before and after the move,
+ * Classifies chess moves by comparing win probability before and after each move,
  * using the same formula as Lichess for centipawn-to-win% conversion.
  */
 
