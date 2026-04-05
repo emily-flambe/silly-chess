@@ -18,6 +18,7 @@ export class GameControls {
   private modal: HTMLElement | null = null;
   private settingsPanel: HTMLElement | null = null;
   private difficultySlider: DifficultySlider | null = null;
+  private modalDifficultySlider: DifficultySlider | null = null;
 
   private gameActive: boolean = false;
   private showCoordinates: boolean = true;
@@ -101,6 +102,15 @@ export class GameControls {
           </div>
         </div>
 
+        <div class="modal-step modal-step-difficulty" style="display: none;">
+          <p class="modal-subtitle">Set difficulty</p>
+          <div id="modal-difficulty-container"></div>
+          <div class="modal-step-buttons">
+            <button class="modal-btn back-btn-difficulty">Back</button>
+            <button class="modal-btn next-btn-difficulty">Next</button>
+          </div>
+        </div>
+
         <div class="modal-step modal-step-color" style="display: none;">
           <p class="modal-subtitle">Choose your color</p>
           <div class="color-selection">
@@ -128,27 +138,58 @@ export class GameControls {
 
     document.body.appendChild(this.modal);
 
+    // Initialize difficulty slider in modal
+    const modalDifficultyContainer = this.modal.querySelector('#modal-difficulty-container');
+    if (modalDifficultyContainer) {
+      this.modalDifficultySlider = new DifficultySlider(modalDifficultyContainer as HTMLElement);
+    }
+
     // Add modal event listeners
     const overlay = this.modal.querySelector('.modal-overlay');
     const cancelBtn = this.modal.querySelector('.cancel-btn');
     const backBtn = this.modal.querySelector('.back-btn');
+    const backBtnDifficulty = this.modal.querySelector('.back-btn-difficulty');
+    const nextBtnDifficulty = this.modal.querySelector('.next-btn-difficulty');
     const modeButtons = this.modal.querySelectorAll('.mode-btn');
     const colorButtons = this.modal.querySelectorAll('.color-btn');
     const modeStep = this.modal.querySelector('.modal-step-mode') as HTMLElement;
+    const difficultyStep = this.modal.querySelector('.modal-step-difficulty') as HTMLElement;
     const colorStep = this.modal.querySelector('.modal-step-color') as HTMLElement;
 
     overlay?.addEventListener('click', () => this.hideModal());
     cancelBtn?.addEventListener('click', () => this.hideModal());
+
+    // Back from color step goes to difficulty (vs-ai) or mode (vs-player)
     backBtn?.addEventListener('click', () => {
       colorStep.style.display = 'none';
+      if (this.selectedMode === 'vs-ai') {
+        difficultyStep.style.display = '';
+      } else {
+        modeStep.style.display = '';
+      }
+    });
+
+    // Back from difficulty step goes to mode
+    backBtnDifficulty?.addEventListener('click', () => {
+      difficultyStep.style.display = 'none';
       modeStep.style.display = '';
+    });
+
+    // Next from difficulty step goes to color
+    nextBtnDifficulty?.addEventListener('click', () => {
+      difficultyStep.style.display = 'none';
+      colorStep.style.display = '';
     });
 
     modeButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         this.selectedMode = (btn as HTMLElement).dataset.mode as GameMode;
         modeStep.style.display = 'none';
-        colorStep.style.display = '';
+        if (this.selectedMode === 'vs-ai') {
+          difficultyStep.style.display = '';
+        } else {
+          colorStep.style.display = '';
+        }
       });
     });
 
@@ -440,6 +481,21 @@ export class GameControls {
         font-size: 36px;
       }
 
+      .modal-step-buttons {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 16px;
+      }
+
+      .next-btn-difficulty {
+        background: #829769;
+        color: #1a1a2e;
+      }
+
+      .next-btn-difficulty:hover {
+        background: #94a877;
+      }
+
       .back-btn {
         margin-top: 12px;
       }
@@ -601,8 +657,10 @@ export class GameControls {
     if (this.modal) {
       // Reset to mode selection step
       const modeStep = this.modal.querySelector('.modal-step-mode') as HTMLElement;
+      const difficultyStep = this.modal.querySelector('.modal-step-difficulty') as HTMLElement;
       const colorStep = this.modal.querySelector('.modal-step-color') as HTMLElement;
       if (modeStep) modeStep.style.display = '';
+      if (difficultyStep) difficultyStep.style.display = 'none';
       if (colorStep) colorStep.style.display = 'none';
       this.modal.style.display = 'block';
     }
@@ -781,10 +839,17 @@ export class GameControls {
   }
 
   /**
-   * Get difficulty slider instance
+   * Get settings difficulty slider instance
    */
   public getDifficultySlider(): DifficultySlider | null {
     return this.difficultySlider;
+  }
+
+  /**
+   * Get modal difficulty slider instance (used during game creation)
+   */
+  public getModalDifficultySlider(): DifficultySlider | null {
+    return this.modalDifficultySlider;
   }
 
   /**

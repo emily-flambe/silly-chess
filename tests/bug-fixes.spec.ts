@@ -17,6 +17,7 @@ async function startGameVsCpu(page: Page, color: 'white' | 'black'): Promise<voi
     await page.getByRole('button', { name: /new game/i }).click();
   }
   await page.locator('.mode-btn[data-mode="vs-ai"]').click();
+  await page.locator('.next-btn-difficulty').click();
   await page.locator(`.color-btn[data-color="${color}"]`).click();
 }
 
