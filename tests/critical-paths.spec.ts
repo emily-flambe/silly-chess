@@ -24,8 +24,8 @@ test.describe('Critical Paths', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#board-container')).toBeVisible();
-    // Modal auto-opens on first visit; wait for it or the "Ready" fallback
-    await expect(page.locator('.game-modal, #status-container')).toBeVisible({ timeout: 30000 });
+    // Wait for engine to load — status shows "Ready" or "Choose a game mode" (modal auto-opens)
+    await expect(page.locator('#status-container')).toContainText(/Ready|Choose a game mode/, { timeout: 30000 });
   });
 
   test('Player can make a move as white', async ({ page }) => {
