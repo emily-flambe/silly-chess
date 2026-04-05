@@ -23,10 +23,9 @@
   <script type="module">
     // This is a usage example - actual integration will use the compiled TypeScript
     import { ChessBoard } from './Board.ts';
-    import { ChessEngine } from '../../lib/chess-engine/index.ts';
+    import { Chess } from 'chess.js';
 
-    // Create chess engine
-    const engine = new ChessEngine();
+    const chess = new Chess();
 
     // Create board
     const container = document.getElementById('board-container');
@@ -36,36 +35,31 @@
       showCoordinates: true
     });
 
-    // Set the engine
-    board.setEngine(engine);
+    // Set initial position
+    board.setPosition(chess.fen());
 
     // Handle moves
     board.onMove((from, to) => {
       console.log(`Move: ${from} -> ${to}`);
 
-      // Make the move
-      const success = engine.move(from, to);
+      try {
+        chess.move({ from, to });
+        board.setPosition(chess.fen());
 
-      if (success) {
-        // Update the board display
-        board.setEngine(engine);
+        let statusText = `Turn: ${chess.turn() === 'w' ? 'white' : 'black'}`;
 
-        // Update status
-        const status = engine.getStatus();
-        let statusText = `Turn: ${status.turn}`;
-
-        if (status.isCheckmate) {
-          statusText = `Checkmate! ${status.turn === 'white' ? 'Black' : 'White'} wins!`;
-        } else if (status.isStalemate) {
+        if (chess.isCheckmate()) {
+          statusText = `Checkmate! ${chess.turn() === 'w' ? 'Black' : 'White'} wins!`;
+        } else if (chess.isStalemate()) {
           statusText = 'Stalemate! Draw.';
-        } else if (status.isDraw) {
+        } else if (chess.isDraw()) {
           statusText = 'Draw!';
-        } else if (status.isCheck) {
+        } else if (chess.isCheck()) {
           statusText += ' - Check!';
         }
 
         document.getElementById('status').textContent = statusText;
-      } else {
+      } catch {
         console.error('Illegal move');
       }
     });
@@ -77,8 +71,8 @@
 
     // Reset button
     document.getElementById('reset-btn').addEventListener('click', () => {
-      engine.reset();
-      board.setEngine(engine);
+      chess.reset();
+      board.setPosition(chess.fen());
       document.getElementById('status').textContent = 'Turn: white';
     });
 

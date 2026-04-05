@@ -219,10 +219,6 @@ Interactive chess board component with piece movement and visual feedback.
 
 ```typescript
 import { ChessBoard } from './components/Board';
-import { ChessEngine } from '../../lib/chess-engine';
-
-// Create chess engine
-const engine = new ChessEngine();
 
 // Create board
 const container = document.getElementById('board-container');
@@ -232,15 +228,13 @@ const board = new ChessBoard(container, {
   showCoordinates: true
 });
 
-// Connect the engine
-board.setEngine(engine);
+// Set position from FEN (server provides this)
+board.setPosition('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
 
-// Handle moves
+// Handle moves (server validates and returns updated FEN)
 board.onMove((from, to) => {
-  const success = engine.move(from, to);
-  if (success) {
-    board.setEngine(engine); // Update display
-  }
+  // Send move to server, receive new FEN, then:
+  board.setPosition(newFen);
 });
 
 // Flip board
@@ -283,7 +277,7 @@ board.setInteractive(false);
 ```typescript
 class ChessBoard {
   constructor(container: HTMLElement, options?: BoardOptions);
-  setEngine(engine: ChessEngine): void;
+  setPosition(fen: string): void;
   flip(): void;
   onMove(callback: (from: string, to: string) => void): void;
   highlightSquares(squares: string[], color: string): void;
