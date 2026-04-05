@@ -28,5 +28,9 @@ bindings = [
 tag = "v1"
 new_classes = ["ChessGame"]
 
+# AI position explanations (optional)
+# Set via: npx wrangler secret put ANTHROPIC_API_KEY
+# The explain feature degrades gracefully if this is not configured.
+
 [dev]
 port = 8787

@@ -14,6 +14,7 @@ import { ChessBoard } from './components/Board';
 import { GameControls } from './components/GameControls';
 import { EvalBar } from './components/EvalBar';
 import { MoveList } from './components/MoveList';
+import { ExplanationPanel } from './components/ExplanationPanel';
 import { GameClient, GameState, GameMode, MoveResult, PlayerColor } from './GameClient';
 import { ChessGrammarClient } from './services/ChessGrammarClient';
 import { TacticsPanel } from './components/TacticsPanel';
@@ -37,6 +38,7 @@ export class SillyChessApp {
   private controls!: GameControls;
   private evalBar!: EvalBar;
   private moveList!: MoveList;
+  private explanationPanel!: ExplanationPanel;
   private stockfish!: FairyStockfishClient;
   private gameClient!: GameClient;
   private tacticsPanel!: TacticsPanel;
@@ -119,6 +121,12 @@ export class SillyChessApp {
     this.moveList = new MoveList(this.containers.moveList);
     this.tacticsPanel = new TacticsPanel(this.containers.tactics);
     this.tacticsClient = new ChessGrammarClient();
+
+    // Create explanation panel (below the status bar)
+    this.explanationPanel = new ExplanationPanel(this.containers.status.parentElement!);
+    const explainBtn = this.explanationPanel.createButton();
+    this.containers.status.parentElement!.appendChild(explainBtn);
+    explainBtn.addEventListener('click', () => this.handleExplain());
 
     // Set up event handlers
     this.setupEventHandlers();
@@ -307,6 +315,7 @@ export class SillyChessApp {
       this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
       this.updateEvaluation(this.state.fen);
       this.requestTacticsUpdate(this.state.fen);
+      this.updateExplainButtonVisibility();
       return;
     }
 
@@ -319,6 +328,7 @@ export class SillyChessApp {
       this.setStatus('Start position (use \u2192 to step forward)');
       this.updateEvaluation(this.START_FEN);
       this.requestTacticsUpdate(this.START_FEN);
+      this.updateExplainButtonVisibility();
       return;
     }
 
@@ -339,6 +349,7 @@ export class SillyChessApp {
     this.setStatus(`Viewing move ${moveNum}${isWhiteMove ? '.' : '...'} (use \u2192 to continue)`);
     this.updateEvaluation(historicalFen);
     this.requestTacticsUpdate(historicalFen);
+    this.updateExplainButtonVisibility();
   }
 
   /**
@@ -492,6 +503,9 @@ export class SillyChessApp {
 
     // Update evaluation bar for final position
     this.updateEvaluation();
+
+    // Show explain button for completed game review
+    this.updateExplainButtonVisibility();
   }
 
   /**
@@ -663,6 +677,8 @@ export class SillyChessApp {
     this.evalBar.reset();
     this.tacticsPanel.clear();
     this.tacticsClient.clearCache();
+    this.explanationPanel.removePanel();
+    this.explanationPanel.setButtonVisible(false);
 
     this.setStatus('Creating game...');
 
@@ -1025,6 +1041,7 @@ export class SillyChessApp {
     }
 
     this.setStatus(statusText);
+    this.updateExplainButtonVisibility();
     this.showPostGameModal(outcome, headline, subtitle);
   }
 
@@ -1046,6 +1063,58 @@ export class SillyChessApp {
 
     // Reset eval bar but keep move list and board for post-game review
     this.evalBar.reset();
+  }
+
+  /**
+   * Handle explain - get AI explanation of current position
+   */
+  private async handleExplain(): Promise<void> {
+    // Determine the FEN for the displayed position
+    let fen: string;
+    if (this.state.viewingHistoryIndex === -1) {
+      fen = this.state.fen;
+    } else if (this.state.viewingHistoryIndex === -2) {
+      fen = this.START_FEN;
+    } else {
+      fen = this.state.fenHistory[this.state.viewingHistoryIndex] || this.state.fen;
+    }
+
+    // Build evaluation string from the eval bar's current value
+    const rawEval = this.evalBar.getEvaluation();
+    const evalText = typeof rawEval === 'string' ? rawEval : `${(rawEval / 100).toFixed(2)} pawns`;
+
+    // Try to get best move from stockfish for context
+    let bestMove: string | undefined;
+    if (this.stockfish?.isReady()) {
+      try {
+        const analysis = await this.stockfish.analyze(fen, { depth: 12 });
+        bestMove = analysis.bestMove;
+      } catch {
+        // Analysis optional for explanation
+      }
+    }
+
+    await this.explanationPanel.explain({
+      fen,
+      evaluation: evalText,
+      bestMove,
+      playerColor: this.state.playerColor,
+      moveHistory: this.state.sanMoves,
+    });
+  }
+
+  /**
+   * Update explain button visibility.
+   * Show during review (history browsing or game over), hide during active play.
+   */
+  private updateExplainButtonVisibility(): void {
+    const isReviewing = this.state.viewingHistoryIndex !== -1 || !this.state.isGameActive;
+    const hasMoves = this.state.sanMoves.length > 0;
+    this.explanationPanel.setButtonVisible(isReviewing && hasMoves);
+    // Dismiss the panel when switching away from review mode
+    if (!isReviewing) {
+      this.explanationPanel.removePanel();
+    }
   }
 
   /**
