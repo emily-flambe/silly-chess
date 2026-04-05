@@ -10,7 +10,11 @@
     "db:create": "wrangler d1 create silly-chess-db",
     "db:migrate": "wrangler d1 execute silly-chess-db --file=./src/db/schema.sql",
     "db:migrate:local": "wrangler d1 execute silly-chess-db --local --file=./src/db/schema.sql",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "npx playwright test",
+    "test:all": "vitest run && npx playwright test"
   },
   "dependencies": {
     "chess.js": "^1.0.0-beta.8",
@@ -20,12 +24,14 @@
     "stockfish": "^17.1.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.14.1",
     "@cloudflare/workers-types": "^4.20241127.0",
     "@playwright/test": "^1.57.0",
     "playwright": "^1.57.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.1",
     "vite-plugin-static-copy": "^3.1.4",
+    "vitest": "^4.1.2",
     "wrangler": "^4.51.0"
   },
   "engines": {
