@@ -20,6 +20,7 @@ import { GameClient, GameState, GameMode, MoveResult, PlayerColor } from './Game
 import { evalToWinPercent, classifyMove, type MoveClassification } from './utils/moveClassification';
 import { ChessGrammarClient } from './services/ChessGrammarClient';
 import { TacticsPanel } from './components/TacticsPanel';
+import { LearnPanel, type MistakeEntry } from './components/LearnPanel';
 
 interface AppState {
   gameId: string | null;
@@ -49,6 +50,7 @@ export class SillyChessApp {
   private postGameAnalysisRunning = false;
   private tacticsPanel!: TacticsPanel;
   private tacticsClient!: ChessGrammarClient;
+  private learnPanel!: LearnPanel;
 
   private readonly START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   private evalRequestId = 0;
@@ -133,6 +135,9 @@ export class SillyChessApp {
     this.analysisPanel = new AnalysisPanel(this.containers.analysis);
     this.tacticsPanel = new TacticsPanel(this.containers.tactics);
     this.tacticsClient = new ChessGrammarClient();
+    this.learnPanel = new LearnPanel(this.containers.analysis.parentElement || this.containers.analysis);
+    this.learnPanel.onNext(() => this.navigateToCurrentLearnMistake());
+    this.learnPanel.onExit(() => this.exitLearnMode());
 
     // Create explanation panel (below the status bar)
     this.explanationPanel = new ExplanationPanel(this.containers.status.parentElement!);
@@ -553,7 +558,11 @@ export class SillyChessApp {
   private setupEventHandlers(): void {
     // Board move handler
     this.board.onMove((from, to, promotion) => {
-      this.handlePlayerMove(from, to, promotion);
+      if (this.learnPanel.isActive() && this.learnPanel.isWaitingForMove()) {
+        this.handleLearnModeMove(from, to, promotion);
+      } else {
+        this.handlePlayerMove(from, to, promotion);
+      }
     });
 
     // Control handlers
@@ -572,6 +581,8 @@ export class SillyChessApp {
 
     // Keyboard navigation for move history (works during game and review)
     document.addEventListener('keydown', (e) => {
+      // Disable move history navigation while in learn mode
+      if (this.learnPanel.isActive()) return;
       // Allow navigation if there are moves to review
       if (this.state.sanMoves.length === 0) return;
       
@@ -692,6 +703,7 @@ export class SillyChessApp {
     this.postGameAnalysisRunning = false;
     this.tacticsPanel.clear();
     this.tacticsClient.clearCache();
+    this.learnPanel.deactivate();
     this.explanationPanel.removePanel();
     this.explanationPanel.setButtonVisible(false);
 
@@ -1286,6 +1298,7 @@ export class SillyChessApp {
         </div>
         <div class="postgame-actions">
           <button class="postgame-btn postgame-btn-review">Review Game</button>
+          <button class="postgame-btn postgame-btn-learn" style="display:none;">Learn From Mistakes</button>
           <button class="postgame-btn postgame-btn-new">New Game</button>
         </div>
       </div>
@@ -1293,8 +1306,15 @@ export class SillyChessApp {
 
     document.body.appendChild(modal);
 
+    // Show the Learn button once analysis completes (poll for it)
+    this.pollForAnalysisComplete(modal);
+
     modal.querySelector('.postgame-overlay')?.addEventListener('click', () => this.removePostGameModal());
     modal.querySelector('.postgame-btn-review')?.addEventListener('click', () => this.removePostGameModal());
+    modal.querySelector('.postgame-btn-learn')?.addEventListener('click', () => {
+      this.removePostGameModal();
+      this.enterLearnMode();
+    });
     modal.querySelector('.postgame-btn-new')?.addEventListener('click', () => {
       this.removePostGameModal();
       this.controls.showModal();
@@ -1414,6 +1434,15 @@ export class SillyChessApp {
         background: #5c6078;
       }
 
+      .postgame-btn-learn {
+        background: #7c5cbf;
+        color: #fff;
+      }
+
+      .postgame-btn-learn:hover {
+        background: #9370db;
+      }
+
       .postgame-btn-new {
         background: #829769;
         color: #fff;
@@ -1435,6 +1464,259 @@ export class SillyChessApp {
       }
     `;
     document.head.appendChild(style);
+  }
+
+  /**
+   * Poll for post-game analysis completion and show the Learn button if mistakes exist
+   */
+  private pollForAnalysisComplete(modal: HTMLElement): void {
+    const learnBtn = modal.querySelector('.postgame-btn-learn') as HTMLElement | null;
+    if (!learnBtn) return;
+
+    const checkInterval = setInterval(() => {
+      // Stop polling if modal was removed
+      if (!document.body.contains(modal)) {
+        clearInterval(checkInterval);
+        return;
+      }
+
+      // Check if analysis is done (classifications populated)
+      if (this.state.classifications.length > 0 && !this.postGameAnalysisRunning) {
+        clearInterval(checkInterval);
+
+        // Check if there are any player mistakes/blunders
+        const hasMistakes = this.getPlayerMistakeIndices().length > 0;
+        if (hasMistakes) {
+          learnBtn.style.display = '';
+        }
+      }
+    }, 500);
+
+    // Stop polling after 60 seconds
+    setTimeout(() => clearInterval(checkInterval), 60000);
+  }
+
+  /**
+   * Get indices of the player's moves that were classified as mistakes or blunders
+   */
+  private getPlayerMistakeIndices(): number[] {
+    const isWhite = this.state.playerColor === 'white';
+    const indices: number[] = [];
+
+    for (let i = 0; i < this.state.classifications.length; i++) {
+      // Player's moves: even indices if white, odd indices if black
+      const isPlayerMove = isWhite ? (i % 2 === 0) : (i % 2 === 1);
+      if (!isPlayerMove) continue;
+
+      const cls = this.state.classifications[i];
+      if (cls === 'mistake' || cls === 'blunder') {
+        indices.push(i);
+      }
+    }
+
+    return indices;
+  }
+
+  /**
+   * Enter learn mode: build mistake list, get best moves from Stockfish, navigate to first
+   */
+  private async enterLearnMode(): Promise<void> {
+    const mistakeIndices = this.getPlayerMistakeIndices();
+    if (mistakeIndices.length === 0) {
+      this.setStatus('No mistakes to review!');
+      return;
+    }
+
+    this.learnPanel.showLoading('Preparing puzzles...');
+    this.board.setInteractive(false);
+    this.setStatus('Preparing learn mode...');
+
+    const mistakes: MistakeEntry[] = [];
+
+    for (const idx of mistakeIndices) {
+      // fenBefore is the position before the move at index idx
+      const fenBefore = idx === 0 ? this.START_FEN : this.state.fenHistory[idx - 1];
+      const fenAfter = this.state.fenHistory[idx];
+      const playerMove = this.state.sanMoves[idx];
+      const classification = this.state.classifications[idx] as string;
+
+      // Eval from the evalHistory (white's perspective)
+      const evalBefore = typeof this.state.evalHistory[idx] === 'number'
+        ? this.state.evalHistory[idx] as number : 0;
+      const evalAfter = typeof this.state.evalHistory[idx + 1] === 'number'
+        ? this.state.evalHistory[idx + 1] as number : 0;
+
+      // Get best move from Stockfish for this position
+      try {
+        const bestMoveUci = await this.stockfish.getBestMove(fenBefore, { depth: 16 });
+        if (!bestMoveUci) continue;
+
+        // Convert UCI to SAN using chess.js
+        const tempChess = new Chess(fenBefore);
+        const from = bestMoveUci.substring(0, 2);
+        const to = bestMoveUci.substring(2, 4);
+        const promotion = bestMoveUci.length > 4 ? bestMoveUci[4] : undefined;
+
+        let bestMoveSan: string;
+        try {
+          const moveResult = tempChess.move({ from, to, promotion });
+          bestMoveSan = moveResult.san;
+        } catch {
+          // If chess.js can't parse it, use the UCI notation
+          bestMoveSan = bestMoveUci;
+        }
+
+        // Get eval after best move
+        const bestMoveFen = tempChess.fen();
+        let bestMoveEval = evalBefore;
+        try {
+          const analysis = await this.stockfish.analyze(bestMoveFen, { depth: 16 });
+          const isBlackToMove = bestMoveFen.split(' ')[1] === 'b';
+          if (typeof analysis.evaluation === 'number') {
+            bestMoveEval = isBlackToMove ? -analysis.evaluation : analysis.evaluation;
+          }
+        } catch {
+          // Use evalBefore as fallback
+        }
+
+        mistakes.push({
+          moveIndex: idx,
+          fenBefore,
+          fenAfter,
+          playerMove,
+          bestMove: bestMoveUci,
+          bestMoveSan,
+          evalBefore,
+          evalAfter,
+          bestMoveEval,
+          classification,
+        });
+      } catch (e) {
+        console.error(`Failed to analyze mistake at index ${idx}:`, e);
+      }
+    }
+
+    if (mistakes.length === 0) {
+      this.setStatus('Could not prepare learn mode');
+      return;
+    }
+
+    this.learnPanel.activate(mistakes);
+    this.navigateToCurrentLearnMistake();
+  }
+
+  /**
+   * Navigate the board to the current learn mode mistake position
+   */
+  private navigateToCurrentLearnMistake(): void {
+    const mistake = this.learnPanel.getCurrentMistake();
+    if (!mistake) return;
+
+    this.board.setPosition(mistake.fenBefore);
+    this.board.clearLastMove();
+    this.board.setInteractive(true);
+    this.updateEvaluation(mistake.fenBefore);
+    this.setStatus('Find the best move!');
+  }
+
+  /**
+   * Handle a player move while in learn mode
+   */
+  private async handleLearnModeMove(from: string, to: string, promotion?: string): Promise<void> {
+    const mistake = this.learnPanel.getCurrentMistake();
+    if (!mistake) return;
+
+    // Disable board while checking
+    this.board.setInteractive(false);
+
+    // Play the move on a temp chess instance to get the resulting FEN
+    const tempChess = new Chess(mistake.fenBefore);
+    try {
+      tempChess.move({ from, to, promotion });
+    } catch {
+      // Illegal move
+      this.board.setInteractive(true);
+      return;
+    }
+
+    const attemptedFen = tempChess.fen();
+
+    // Show the attempted move on the board
+    this.board.setPosition(attemptedFen);
+    this.board.setLastMove(from, to);
+
+    // Get Stockfish eval for the attempted move position
+    let attemptedEval: number;
+    try {
+      const analysis = await this.stockfish.analyze(attemptedFen, { depth: 16 });
+      const isBlackToMove = attemptedFen.split(' ')[1] === 'b';
+      if (typeof analysis.evaluation === 'number') {
+        attemptedEval = isBlackToMove ? -analysis.evaluation : analysis.evaluation;
+      } else {
+        // Mate score - treat as extreme
+        attemptedEval = analysis.evaluation.startsWith('-') ? -10000 : 10000;
+        const isBlack = attemptedFen.split(' ')[1] === 'b';
+        if (isBlack) attemptedEval = -attemptedEval;
+      }
+    } catch {
+      // Can't evaluate, treat as incorrect
+      this.learnPanel.showIncorrect(mistake.bestMoveSan, mistake.bestMoveEval);
+      this.showBestMoveOnBoard(mistake);
+      return;
+    }
+
+    // Compare: is the attempted move within 50cp of the best move's eval?
+    // Both evals are from white's perspective.
+    // But we need to compare from the player's perspective.
+    const isPlayerWhite = this.state.playerColor === 'white';
+    const playerAttemptedEval = isPlayerWhite ? attemptedEval : -attemptedEval;
+    const playerBestEval = isPlayerWhite ? mistake.bestMoveEval : -mistake.bestMoveEval;
+
+    const evalDiff = playerBestEval - playerAttemptedEval;
+
+    if (evalDiff <= 50) {
+      // Correct (within 50cp)
+      this.learnPanel.showCorrect(mistake.bestMoveSan, mistake.bestMoveEval);
+      this.setStatus('Correct!');
+    } else {
+      // Incorrect
+      this.learnPanel.showIncorrect(mistake.bestMoveSan, mistake.bestMoveEval);
+      this.showBestMoveOnBoard(mistake);
+      this.setStatus('Not quite - see the best move highlighted');
+    }
+  }
+
+  /**
+   * Show the best move highlighted on the board
+   */
+  private showBestMoveOnBoard(mistake: MistakeEntry): void {
+    // Play the best move on a temp chess to show the resulting position
+    const tempChess = new Chess(mistake.fenBefore);
+    const from = mistake.bestMove.substring(0, 2);
+    const to = mistake.bestMove.substring(2, 4);
+    const promotion = mistake.bestMove.length > 4 ? mistake.bestMove[4] : undefined;
+
+    try {
+      tempChess.move({ from, to, promotion });
+      this.board.setPosition(tempChess.fen());
+      this.board.setLastMove(from, to);
+    } catch {
+      // Fallback: just highlight the squares on the original position
+      this.board.setPosition(mistake.fenBefore);
+      this.board.showHint(from, to);
+    }
+  }
+
+  /**
+   * Exit learn mode and return to normal post-game review
+   */
+  private exitLearnMode(): void {
+    this.learnPanel.deactivate();
+    this.board.setInteractive(false);
+    this.board.setPosition(this.state.fen);
+    this.board.clearLastMove();
+    this.setStatus('Use \u2190 \u2192 to review the game.');
+    this.updateEvaluation();
   }
 
   /**
