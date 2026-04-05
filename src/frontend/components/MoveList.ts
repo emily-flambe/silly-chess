@@ -119,7 +119,7 @@ export class MoveList {
       .section-header {
         font-size: 14px;
         font-weight: 600;
-        color: #888;
+        color: #9a9eb1;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         margin-bottom: 8px;
@@ -135,7 +135,7 @@ export class MoveList {
 
       .captured-label {
         font-size: 12px;
-        color: #888;
+        color: #9a9eb1;
         font-weight: 600;
         min-width: 20px;
       }
@@ -163,15 +163,20 @@ export class MoveList {
       }
 
       .captured-piece-black {
-        color: #222;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        color: #1a1a1a;
+        text-shadow:
+          -1px -1px 0 #888,
+          1px -1px 0 #888,
+          -1px 1px 0 #888,
+          1px 1px 0 #888,
+          0 2px 4px rgba(0, 0, 0, 0.3);
       }
 
       .move-list-header {
         padding: 12px 16px;
         font-size: 14px;
         font-weight: 600;
-        color: #888;
+        color: #9a9eb1;
         border-bottom: 1px solid #333;
         text-transform: uppercase;
         letter-spacing: 0.5px;
@@ -213,7 +218,7 @@ export class MoveList {
       }
 
       .move-number {
-        color: #666;
+        color: #7a7e8f;
         font-size: 12px;
         min-width: 28px;
         font-variant-numeric: tabular-nums;
@@ -252,11 +257,11 @@ export class MoveList {
       }
 
       .move-empty {
-        color: #444;
+        color: #555;
       }
 
       .move-list-empty {
-        color: #666;
+        color: #7a7e8f;
         font-size: 13px;
         text-align: center;
         padding: 24px 16px;

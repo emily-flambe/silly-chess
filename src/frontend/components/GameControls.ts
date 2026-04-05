@@ -370,7 +370,7 @@ export class GameControls {
       .modal-subtitle {
         margin: 0 0 24px 0;
         font-size: 14px;
-        color: #888;
+        color: #9a9eb1;
         text-align: center;
       }
 
@@ -417,8 +417,13 @@ export class GameControls {
       }
 
       .color-icon-black {
-        color: #333;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        color: #1a1a1a;
+        text-shadow:
+          -1px -1px 0 #888,
+          1px -1px 0 #888,
+          -1px 1px 0 #888,
+          1px 1px 0 #888,
+          0 2px 4px rgba(0, 0, 0, 0.3);
       }
 
       .color-label {
@@ -550,7 +555,7 @@ export class GameControls {
       .settings-close {
         background: none;
         border: none;
-        color: #888;
+        color: #9a9eb1;
         font-size: 32px;
         line-height: 1;
         cursor: pointer;
