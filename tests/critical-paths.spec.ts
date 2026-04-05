@@ -8,9 +8,13 @@ import { test, expect, Page } from '@playwright/test';
  * via Vitest backend tests. E2E tests verify the UI layer.
  */
 
-/** Start a new game via the UI modal */
+/** Start a new game via the UI modal (may already be open on first visit) */
 async function startGameVsCpu(page: Page, color: 'white' | 'black'): Promise<void> {
-  await page.getByRole('button', { name: /new game/i }).click();
+  // Modal auto-opens on first visit; click New Game only if it's not already visible
+  const modal = page.locator('.game-modal');
+  if (!(await modal.isVisible())) {
+    await page.getByRole('button', { name: /new game/i }).click();
+  }
   await page.locator('.mode-btn[data-mode="vs-ai"]').click();
   await page.locator(`.color-btn[data-color="${color}"]`).click();
 }
@@ -20,7 +24,8 @@ test.describe('Critical Paths', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#board-container')).toBeVisible();
-    await expect(page.locator('#status-container')).toContainText('Ready', { timeout: 30000 });
+    // Modal auto-opens on first visit; wait for it or the "Ready" fallback
+    await expect(page.locator('.game-modal, #status-container')).toBeVisible({ timeout: 30000 });
   });
 
   test('Player can make a move as white', async ({ page }) => {
@@ -118,7 +123,11 @@ test.describe('Critical Paths', () => {
   });
 
   test('Mode selection modal has correct options', async ({ page }) => {
-    await page.getByRole('button', { name: /new game/i }).click();
+    // Modal auto-opens on first visit; click New Game only if not visible
+    const modal = page.locator('.game-modal');
+    if (!(await modal.isVisible())) {
+      await page.getByRole('button', { name: /new game/i }).click();
+    }
 
     // Should show mode selection
     await expect(page.locator('.mode-btn[data-mode="vs-ai"]')).toBeVisible();
