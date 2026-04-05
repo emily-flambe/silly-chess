@@ -99,12 +99,13 @@ export class SillyChessApp {
     this.setupGameClientHandlers();
 
     // Create UI components (board operates on FEN directly now)
+    this.controls = new GameControls(this.containers.controls);
+
     this.board = new ChessBoard(this.containers.board, {
       interactive: true,
-      showCoordinates: true,
+      showCoordinates: this.controls.getPreferences().showCoordinates,
     });
 
-    this.controls = new GameControls(this.containers.controls);
     this.evalBar = new EvalBar(this.containers.evalBar);
     this.moveList = new MoveList(this.containers.moveList);
 
@@ -547,6 +548,10 @@ export class SillyChessApp {
 
     this.controls.onHint(() => {
       this.handleHint();
+    });
+
+    this.controls.onCoordinatesChange((show) => {
+      this.board.setShowCoordinates(show);
     });
 
     // Difficulty slider change

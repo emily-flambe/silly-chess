@@ -26,6 +26,7 @@ export class GameControls {
   private newGameCallbacks: Array<(options: NewGameOptions) => void> = [];
   private resignCallbacks: Array<() => void> = [];
   private hintCallbacks: Array<() => void> = [];
+  private coordinatesChangeCallbacks: Array<(show: boolean) => void> = [];
 
   private readonly STORAGE_KEY_COORDS = 'silly-chess-show-coords';
 
@@ -217,6 +218,7 @@ export class GameControls {
     coordsToggle?.addEventListener('change', (e) => {
       this.showCoordinates = (e.target as HTMLInputElement).checked;
       this.savePreferences();
+      this.coordinatesChangeCallbacks.forEach(cb => cb(this.showCoordinates));
     });
   }
 
@@ -674,6 +676,13 @@ export class GameControls {
    */
   public onHint(callback: () => void): void {
     this.hintCallbacks.push(callback);
+  }
+
+  /**
+   * Register coordinates change callback
+   */
+  public onCoordinatesChange(callback: (show: boolean) => void): void {
+    this.coordinatesChangeCallbacks.push(callback);
   }
 
   /**
