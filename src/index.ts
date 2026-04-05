@@ -6,14 +6,13 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { getCookie, setCookie } from 'hono/cookie';
-import type { Env, GameResult, UpdateGameRequest, UserPreferences } from './types';
+import type { Env, UserPreferences } from './types';
 import {
   createUser,
   getUser,
   updateUserPreferences,
   getGame,
   listGames,
-  endGame,
 } from './db/queries';
 
 // Re-export the Durable Object class
@@ -384,29 +383,6 @@ app.post('/api/games/:id/resign', async (c) => {
   } catch (error) {
     console.error('Error resigning game:', error);
     return c.json({ error: 'Failed to resign' }, 500);
-  }
-});
-
-// End game with result (legacy endpoint for compatibility)
-app.post('/api/games/:id/end', async (c) => {
-  try {
-    const gameId = c.req.param('id');
-    const body = await c.req.json() as { result: GameResult };
-
-    if (!body.result || body.result === '*') {
-      return c.json({ error: 'Invalid result' }, 400);
-    }
-
-    const game = await endGame(c.env.DB, gameId, body.result);
-
-    if (!game) {
-      return c.json({ error: 'Game not found' }, 404);
-    }
-
-    return c.json(game);
-  } catch (error) {
-    console.error('Error ending game:', error);
-    return c.json({ error: 'Failed to end game' }, 500);
   }
 });
 

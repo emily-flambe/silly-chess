@@ -3,11 +3,10 @@
  *
  * Interactive chess board with piece movement support.
  * Supports click-to-move and displays legal moves.
- * Can operate with ChessEngine (legacy) or FEN-based positioning (server mode).
+ * Operates with FEN-based positioning (server mode).
  */
 
 import { Chess } from 'chess.js';
-import type { ChessEngine } from '../../lib/chess-engine';
 import type { Color } from '../../types';
 
 export interface BoardOptions {
@@ -37,14 +36,12 @@ interface PieceInfo {
 export class ChessBoard {
   private container: HTMLElement;
   private boardElement: HTMLElement;
-  private engine: ChessEngine | null = null;
   private options: Required<BoardOptions>;
   private selectedSquare: string | null = null;
   private legalMoves: string[] = [];
   private lastMove: { from: string; to: string } | null = null;
   private moveCallbacks: MoveCallback[] = [];
-  private highlightedSquares: Map<string, string> = new Map();
-  
+
   // FEN-based state (for server-authoritative mode)
   private currentFen: string = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   private fenPieces: Map<string, PieceInfo> = new Map();
@@ -62,7 +59,7 @@ export class ChessBoard {
     this.container.innerHTML = '';
     this.boardElement = this.createBoardElement();
     this.container.appendChild(this.boardElement);
-    
+
     // Parse and render the default starting position
     this.parseFen(this.currentFen);
     this.render();
@@ -158,10 +155,8 @@ export class ChessBoard {
    */
   private handleSquareClick(square: string): void {
     if (!this.options.interactive) return;
-    
-    // In FEN mode (no engine), allow piece selection and move attempts
-    const hasPieces = this.engine || this.fenPieces.size > 0;
-    if (!hasPieces) return;
+
+    if (this.fenPieces.size === 0) return;
 
     // If no square selected, try to select this square
     if (!this.selectedSquare) {
@@ -170,16 +165,9 @@ export class ChessBoard {
       // If clicking the same square, deselect it
       if (this.selectedSquare === square) {
         this.deselectSquare();
-      } else if (this.engine && this.legalMoves.includes(square)) {
-        // If we have engine and this is a legal move, make the move
-        this.makeMove(this.selectedSquare, square);
-      } else if (!this.engine) {
-        // In FEN mode, always attempt the move (server validates)
-        this.makeMove(this.selectedSquare, square);
       } else {
-        // Otherwise, try to select the new square
-        this.deselectSquare();
-        this.selectSquare(square);
+        // Always attempt the move (server validates)
+        this.makeMove(this.selectedSquare, square);
       }
     }
   }
@@ -192,21 +180,14 @@ export class ChessBoard {
     const piece = this.getPieceAt(square);
     if (!piece) return;
 
-    // If we have engine, use it for legal moves
-    if (this.engine) {
-      const moves = this.engine.getLegalMoves(square);
+    // Compute legal moves using chess.js
+    try {
+      const chess = new Chess(this.currentFen);
+      const moves = chess.moves({ square: square as any, verbose: true });
       if (moves.length === 0) return;
       this.legalMoves = moves.map(m => m.to);
-    } else {
-      // In FEN mode, compute legal moves using chess.js
-      try {
-        const chess = new Chess(this.currentFen);
-        const moves = chess.moves({ square: square as any, verbose: true });
-        if (moves.length === 0) return;
-        this.legalMoves = moves.map(m => m.to);
-      } catch {
-        this.legalMoves = [];
-      }
+    } catch {
+      this.legalMoves = [];
     }
 
     this.selectedSquare = square;
@@ -355,32 +336,21 @@ export class ChessBoard {
   }
 
   /**
-   * Get piece at square from engine or FEN state
+   * Get piece at square from FEN state
    */
   private getPieceAt(square: string): { piece: string; color: Color } | null {
-    if (this.engine) {
-      const state = this.engine.getState();
-      return state.pieces.get(square) || null;
-    }
-    
-    // FEN-based mode
     return this.fenPieces.get(square) || null;
   }
 
   /**
-   * Render the board based on current engine state or FEN
+   * Render the board based on current FEN state
    */
   private render(): void {
     // Clear all pieces and highlights
     this.clearBoard();
 
-    // Get pieces from engine or FEN state
-    const pieces = this.engine 
-      ? this.engine.getState().pieces 
-      : this.fenPieces;
-
     // Place pieces
-    pieces.forEach((pieceInfo, square) => {
+    this.fenPieces.forEach((pieceInfo, square) => {
       const squareElement = this.getSquareElement(square);
       if (squareElement) {
         const pieceElement = document.createElement('div');
@@ -399,62 +369,24 @@ export class ChessBoard {
       if (toSquare) toSquare.classList.add('last-move');
     }
 
-    // Highlight check
-    if (this.engine) {
-      const status = this.engine.getStatus();
-      if (status.isCheck) {
-        const state = this.engine.getState();
-        const kingSquare = this.findKingSquare(state.turn);
-        if (kingSquare) {
-          const squareElement = this.getSquareElement(kingSquare);
-          if (squareElement) {
-            squareElement.classList.add('in-check');
-          }
-        }
-      }
-    } else {
-      // FEN mode: detect check using chess.js
-      try {
-        const chess = new Chess(this.currentFen);
-        if (chess.isCheck()) {
-          const turn: Color = chess.turn() === 'w' ? 'white' : 'black';
-          for (const [square, piece] of this.fenPieces.entries()) {
-            if (piece.piece === 'k' && piece.color === turn) {
-              const squareElement = this.getSquareElement(square);
-              if (squareElement) {
-                squareElement.classList.add('in-check');
-              }
-              break;
+    // Highlight check using chess.js
+    try {
+      const chess = new Chess(this.currentFen);
+      if (chess.isCheck()) {
+        const turn: Color = chess.turn() === 'w' ? 'white' : 'black';
+        for (const [square, piece] of this.fenPieces.entries()) {
+          if (piece.piece === 'k' && piece.color === turn) {
+            const squareElement = this.getSquareElement(square);
+            if (squareElement) {
+              squareElement.classList.add('in-check');
             }
+            break;
           }
         }
-      } catch {
-        // Invalid FEN, skip check detection
       }
+    } catch {
+      // Invalid FEN, skip check detection
     }
-
-    // Apply custom highlights
-    this.highlightedSquares.forEach((color, square) => {
-      const squareElement = this.getSquareElement(square);
-      if (squareElement) {
-        squareElement.style.backgroundColor = color;
-      }
-    });
-  }
-
-  /**
-   * Find the king square for a given color
-   */
-  private findKingSquare(color: Color): string | null {
-    if (!this.engine) return null;
-
-    const state = this.engine.getState();
-    for (const [square, piece] of state.pieces.entries()) {
-      if (piece.piece === 'k' && piece.color === color) {
-        return square;
-      }
-    }
-    return null;
   }
 
   /**
@@ -511,19 +443,11 @@ export class ChessBoard {
   }
 
   /**
-   * Set the position from a FEN string or ChessEngine instance
+   * Set the position from a FEN string
    */
-  setPosition(engineOrFen: ChessEngine | string): void {
-    if (typeof engineOrFen === 'string') {
-      // FEN string mode - parse and render
-      this.parseFen(engineOrFen);
-      this.engine = null; // Clear engine reference in FEN mode
-      this.render();
-    } else {
-      // ChessEngine mode (legacy)
-      this.engine = engineOrFen;
-      this.render();
-    }
+  setPosition(fen: string): void {
+    this.parseFen(fen);
+    this.render();
   }
 
   /**
@@ -545,14 +469,6 @@ export class ChessBoard {
   }
 
   /**
-   * Set the chess engine
-   */
-  setEngine(engine: ChessEngine): void {
-    this.engine = engine;
-    this.render();
-  }
-
-  /**
    * Flip the board
    */
   flip(): void {
@@ -565,24 +481,6 @@ export class ChessBoard {
    */
   onMove(callback: MoveCallback): void {
     this.moveCallbacks.push(callback);
-  }
-
-  /**
-   * Highlight specific squares
-   */
-  highlightSquares(squares: string[], color: string): void {
-    squares.forEach(square => {
-      this.highlightedSquares.set(square, color);
-    });
-    this.render();
-  }
-
-  /**
-   * Clear all highlights
-   */
-  clearHighlights(): void {
-    this.highlightedSquares.clear();
-    this.render();
   }
 
   /**
@@ -622,18 +520,10 @@ export class ChessBoard {
   }
 
   /**
-   * Update the board display (re-render from engine state)
-   */
-  update(): void {
-    this.render();
-  }
-
-  /**
    * Destroy the board and clean up
    */
   destroy(): void {
     this.boardElement.remove();
     this.moveCallbacks = [];
-    this.engine = null;
   }
 }
