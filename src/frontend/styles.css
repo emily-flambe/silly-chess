@@ -294,6 +294,30 @@ body {
   }
 }
 
+/* AI Thinking Indicator */
+.chess-board.ai-thinking {
+  animation: thinking-glow 1.5s ease-in-out infinite;
+}
+
+@keyframes thinking-glow {
+  0%, 100% {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    border-color: #272522;
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(93, 173, 226, 0.4), 0 10px 30px rgba(0, 0, 0, 0.3);
+    border-color: rgba(93, 173, 226, 0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chess-board.ai-thinking {
+    animation: none;
+    box-shadow: 0 0 15px rgba(93, 173, 226, 0.4), 0 10px 30px rgba(0, 0, 0, 0.3);
+    border-color: rgba(93, 173, 226, 0.6);
+  }
+}
+
 /* Loading State */
 .chess-board.loading {
   opacity: 0.5;
