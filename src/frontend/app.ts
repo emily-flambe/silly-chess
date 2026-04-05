@@ -15,6 +15,8 @@ import { GameControls } from './components/GameControls';
 import { EvalBar } from './components/EvalBar';
 import { MoveList } from './components/MoveList';
 import { GameClient, GameState, GameMode, MoveResult, PlayerColor } from './GameClient';
+import { ChessGrammarClient } from './services/ChessGrammarClient';
+import { TacticsPanel } from './components/TacticsPanel';
 
 interface AppState {
   gameId: string | null;
@@ -37,9 +39,12 @@ export class SillyChessApp {
   private moveList!: MoveList;
   private stockfish!: FairyStockfishClient;
   private gameClient!: GameClient;
+  private tacticsPanel!: TacticsPanel;
+  private tacticsClient!: ChessGrammarClient;
 
   private readonly START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   private evalRequestId = 0;
+  private tacticsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   private state: AppState = {
     gameId: null,
@@ -62,6 +67,7 @@ export class SillyChessApp {
     status: HTMLElement;
     difficultyDisplay: HTMLElement;
     moveList: HTMLElement;
+    tactics: HTMLElement;
   };
 
   constructor() {
@@ -72,8 +78,9 @@ export class SillyChessApp {
     const statusContainer = document.getElementById('status-container');
     const difficultyDisplay = document.getElementById('difficulty-display');
     const moveListContainer = document.getElementById('move-list-container');
+    const tacticsContainer = document.getElementById('tactics-container');
 
-    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer) {
+    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer || !tacticsContainer) {
       throw new Error('Required container elements not found');
     }
 
@@ -84,6 +91,7 @@ export class SillyChessApp {
       status: statusContainer,
       difficultyDisplay: difficultyDisplay,
       moveList: moveListContainer,
+      tactics: tacticsContainer,
     };
 
     this.initialize();
@@ -109,6 +117,8 @@ export class SillyChessApp {
 
     this.evalBar = new EvalBar(this.containers.evalBar);
     this.moveList = new MoveList(this.containers.moveList);
+    this.tacticsPanel = new TacticsPanel(this.containers.tactics);
+    this.tacticsClient = new ChessGrammarClient();
 
     // Set up event handlers
     this.setupEventHandlers();
@@ -296,6 +306,7 @@ export class SillyChessApp {
       this.board.setInteractive(this.state.isGameActive && !this.state.isThinking);
       this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
       this.updateEvaluation(this.state.fen);
+      this.requestTacticsUpdate(this.state.fen);
       return;
     }
 
@@ -305,8 +316,9 @@ export class SillyChessApp {
       this.board.setPosition(this.START_FEN);
       this.board.clearLastMove();
       this.board.setInteractive(false);
-      this.setStatus('Start position (use → to step forward)');
+      this.setStatus('Start position (use \u2192 to step forward)');
       this.updateEvaluation(this.START_FEN);
+      this.requestTacticsUpdate(this.START_FEN);
       return;
     }
 
@@ -324,8 +336,9 @@ export class SillyChessApp {
 
     const moveNum = Math.floor(moveIndex / 2) + 1;
     const isWhiteMove = moveIndex % 2 === 0;
-    this.setStatus(`Viewing move ${moveNum}${isWhiteMove ? '.' : '...'} (use → to continue)`);
+    this.setStatus(`Viewing move ${moveNum}${isWhiteMove ? '.' : '...'} (use \u2192 to continue)`);
     this.updateEvaluation(historicalFen);
+    this.requestTacticsUpdate(historicalFen);
   }
 
   /**
@@ -648,6 +661,8 @@ export class SillyChessApp {
     this.board.clearLastMove();
     this.moveList.clear();
     this.evalBar.reset();
+    this.tacticsPanel.clear();
+    this.tacticsClient.clearCache();
 
     this.setStatus('Creating game...');
 
@@ -770,9 +785,11 @@ export class SillyChessApp {
         // In two-player mode, wait for opponent's move via WebSocket
         this.board.setInteractive(false);
         this.setStatus("Opponent's turn");
+        this.requestTacticsUpdate(result.fen);
       } else {
         // Update evaluation and make AI move
         await this.updateEvaluation();
+        this.requestTacticsUpdate(result.fen);
         await this.makeAIMove();
       }
     } catch (error) {
@@ -857,6 +874,7 @@ export class SillyChessApp {
         }
 
         await this.updateEvaluation();
+        this.requestTacticsUpdate(this.state.fen);
         this.setStatus('Your turn');
       }
     } catch (error) {
@@ -874,6 +892,29 @@ export class SillyChessApp {
         this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
       }
     }
+  }
+
+  /**
+   * Request tactical analysis for a position (debounced to avoid API spam).
+   * Skips analysis while the AI is thinking.
+   */
+  private requestTacticsUpdate(fen: string): void {
+    if (this.state.isThinking) return;
+
+    if (this.tacticsDebounceTimer) {
+      clearTimeout(this.tacticsDebounceTimer);
+    }
+
+    this.tacticsPanel.setLoading();
+
+    this.tacticsDebounceTimer = setTimeout(async () => {
+      try {
+        const patterns = await this.tacticsClient.detectTactics(fen);
+        this.tacticsPanel.setPatterns(patterns);
+      } catch {
+        this.tacticsPanel.setPatterns([]);
+      }
+    }, 400);
   }
 
   /**
