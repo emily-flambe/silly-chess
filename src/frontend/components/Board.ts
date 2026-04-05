@@ -85,6 +85,7 @@ export class ChessBoard {
 
     // Add coordinate labels if enabled
     if (this.options.showCoordinates) {
+      board.classList.add('with-coords');
       this.addCoordinates(board);
     }
 
@@ -507,6 +508,23 @@ export class ChessBoard {
   clearLastMove(): void {
     this.lastMove = null;
     this.render();
+  }
+
+  /**
+   * Show or hide board coordinates
+   */
+  setShowCoordinates(show: boolean): void {
+    if (this.options.showCoordinates === show) return;
+    this.options.showCoordinates = show;
+
+    // Remove existing coordinate labels
+    this.boardElement.querySelectorAll('.coordinate').forEach(el => el.remove());
+    this.boardElement.classList.remove('with-coords');
+
+    if (show) {
+      this.boardElement.classList.add('with-coords');
+      this.addCoordinates(this.boardElement);
+    }
   }
 
   /**
