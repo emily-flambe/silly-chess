@@ -563,7 +563,7 @@ export class SillyChessApp {
       this.board.setShowCoordinates(show);
     });
 
-    // Difficulty slider change
+    // Difficulty slider change (settings panel)
     const slider = this.controls.getDifficultySlider();
     if (slider) {
       this.updateDifficultyDisplay(slider.getElo());
@@ -571,6 +571,22 @@ export class SillyChessApp {
       slider.onChange(async (elo) => {
         this.state.aiElo = elo;
         this.updateDifficultyDisplay(elo);
+        // Sync modal slider
+        const modalSlider = this.controls.getModalDifficultySlider();
+        if (modalSlider) modalSlider.setElo(elo);
+        if (this.stockfish?.isReady()) {
+          await this.stockfish.setElo(elo);
+        }
+      });
+    }
+
+    // Difficulty slider change (modal) — sync to settings slider
+    const modalSlider = this.controls.getModalDifficultySlider();
+    if (modalSlider) {
+      modalSlider.onChange(async (elo) => {
+        this.state.aiElo = elo;
+        this.updateDifficultyDisplay(elo);
+        if (slider) slider.setElo(elo);
         if (this.stockfish?.isReady()) {
           await this.stockfish.setElo(elo);
         }
@@ -606,6 +622,22 @@ export class SillyChessApp {
    * Start a new game
    */
   private async startNewGame(playerColor: PlayerColor, mode: GameMode = 'vs-ai'): Promise<void> {
+    // Read elo from modal slider (user just set it) and sync to settings slider
+    if (mode === 'vs-ai') {
+      const modalSlider = this.controls.getModalDifficultySlider();
+      if (modalSlider) {
+        const elo = modalSlider.getElo();
+        this.state.aiElo = elo;
+        this.updateDifficultyDisplay(elo);
+        // Sync settings slider to match
+        const settingsSlider = this.controls.getDifficultySlider();
+        if (settingsSlider) settingsSlider.setElo(elo);
+        if (this.stockfish?.isReady()) {
+          await this.stockfish.setElo(elo);
+        }
+      }
+    }
+
     // Stop any pending analysis
     if (this.stockfish?.isReady()) {
       await this.stockfish.stop();

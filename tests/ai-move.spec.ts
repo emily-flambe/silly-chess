@@ -34,6 +34,7 @@ test.describe('AI Move Tests', () => {
       await page.getByRole('button', { name: /new game/i }).click();
     }
     await page.locator('.mode-btn[data-mode="vs-ai"]').click();
+    await page.locator('.next-btn-difficulty').click();
     await page.locator('.color-btn[data-color="white"]').click();
 
     // Verify game started
@@ -100,6 +101,7 @@ test.describe('AI Move Tests', () => {
       await page.getByRole('button', { name: /new game/i }).click();
     }
     await page.locator('.mode-btn[data-mode="vs-ai"]').click();
+    await page.locator('.next-btn-difficulty').click();
     await page.locator('.color-btn[data-color="black"]').click();
 
     // Wait for AI to think (white moves first)
