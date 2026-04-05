@@ -15,8 +15,11 @@ import { GameControls } from './components/GameControls';
 import { EvalBar } from './components/EvalBar';
 import { MoveList } from './components/MoveList';
 import { AnalysisPanel } from './components/AnalysisPanel';
+import { ExplanationPanel } from './components/ExplanationPanel';
 import { GameClient, GameState, GameMode, MoveResult, PlayerColor } from './GameClient';
 import { evalToWinPercent, classifyMove, type MoveClassification } from './utils/moveClassification';
+import { ChessGrammarClient } from './services/ChessGrammarClient';
+import { TacticsPanel } from './components/TacticsPanel';
 
 interface AppState {
   gameId: string | null;
@@ -40,12 +43,16 @@ export class SillyChessApp {
   private evalBar!: EvalBar;
   private moveList!: MoveList;
   private analysisPanel!: AnalysisPanel;
+  private explanationPanel!: ExplanationPanel;
   private stockfish!: FairyStockfishClient;
   private gameClient!: GameClient;
   private postGameAnalysisRunning = false;
+  private tacticsPanel!: TacticsPanel;
+  private tacticsClient!: ChessGrammarClient;
 
   private readonly START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   private evalRequestId = 0;
+  private tacticsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   private state: AppState = {
     gameId: null,
@@ -71,6 +78,7 @@ export class SillyChessApp {
     difficultyDisplay: HTMLElement;
     moveList: HTMLElement;
     analysis: HTMLElement;
+    tactics: HTMLElement;
   };
 
   constructor() {
@@ -82,8 +90,9 @@ export class SillyChessApp {
     const difficultyDisplay = document.getElementById('difficulty-display');
     const moveListContainer = document.getElementById('move-list-container');
     const analysisContainer = document.getElementById('analysis-container');
+    const tacticsContainer = document.getElementById('tactics-container');
 
-    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer || !analysisContainer) {
+    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer || !analysisContainer || !tacticsContainer) {
       throw new Error('Required container elements not found');
     }
 
@@ -95,6 +104,7 @@ export class SillyChessApp {
       difficultyDisplay: difficultyDisplay,
       moveList: moveListContainer,
       analysis: analysisContainer,
+      tactics: tacticsContainer,
     };
 
     this.initialize();
@@ -121,6 +131,14 @@ export class SillyChessApp {
     this.evalBar = new EvalBar(this.containers.evalBar);
     this.moveList = new MoveList(this.containers.moveList);
     this.analysisPanel = new AnalysisPanel(this.containers.analysis);
+    this.tacticsPanel = new TacticsPanel(this.containers.tactics);
+    this.tacticsClient = new ChessGrammarClient();
+
+    // Create explanation panel (below the status bar)
+    this.explanationPanel = new ExplanationPanel(this.containers.status.parentElement!);
+    const explainBtn = this.explanationPanel.createButton();
+    this.containers.status.parentElement!.appendChild(explainBtn);
+    explainBtn.addEventListener('click', () => this.handleExplain());
 
     // Set up event handlers
     this.setupEventHandlers();
@@ -308,6 +326,8 @@ export class SillyChessApp {
       this.board.setInteractive(this.state.isGameActive && !this.state.isThinking);
       this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
       this.updateEvaluation(this.state.fen);
+      this.requestTacticsUpdate(this.state.fen);
+      this.updateExplainButtonVisibility();
       return;
     }
 
@@ -317,8 +337,10 @@ export class SillyChessApp {
       this.board.setPosition(this.START_FEN);
       this.board.clearLastMove();
       this.board.setInteractive(false);
-      this.setStatus('Start position (use → to step forward)');
+      this.setStatus('Start position (use \u2192 to step forward)');
       this.updateEvaluation(this.START_FEN);
+      this.requestTacticsUpdate(this.START_FEN);
+      this.updateExplainButtonVisibility();
       return;
     }
 
@@ -336,9 +358,11 @@ export class SillyChessApp {
 
     const moveNum = Math.floor(moveIndex / 2) + 1;
     const isWhiteMove = moveIndex % 2 === 0;
-    this.setStatus(`Viewing move ${moveNum}${isWhiteMove ? '.' : '...'} (use → to continue)`);
+    this.setStatus(`Viewing move ${moveNum}${isWhiteMove ? '.' : '...'} (use \u2192 to continue)`);
     this.updateEvaluation(historicalFen);
     this.updateAnalysisPanel(historicalFen);
+    this.requestTacticsUpdate(historicalFen);
+    this.updateExplainButtonVisibility();
   }
 
   /**
@@ -492,6 +516,9 @@ export class SillyChessApp {
 
     // Update evaluation bar for final position
     this.updateEvaluation();
+
+    // Show explain button for completed game review
+    this.updateExplainButtonVisibility();
   }
 
   /**
@@ -663,6 +690,10 @@ export class SillyChessApp {
     this.evalBar.reset();
     this.analysisPanel.clear();
     this.postGameAnalysisRunning = false;
+    this.tacticsPanel.clear();
+    this.tacticsClient.clearCache();
+    this.explanationPanel.removePanel();
+    this.explanationPanel.setButtonVisible(false);
 
     this.setStatus('Creating game...');
 
@@ -787,9 +818,11 @@ export class SillyChessApp {
         // In two-player mode, wait for opponent's move via WebSocket
         this.board.setInteractive(false);
         this.setStatus("Opponent's turn");
+        this.requestTacticsUpdate(result.fen);
       } else {
         // Update evaluation and make AI move
         await this.updateEvaluation();
+        this.requestTacticsUpdate(result.fen);
         await this.makeAIMove();
       }
     } catch (error) {
@@ -874,6 +907,7 @@ export class SillyChessApp {
         }
 
         await this.updateEvaluation();
+        this.requestTacticsUpdate(this.state.fen);
         this.setStatus('Your turn');
       }
     } catch (error) {
@@ -891,6 +925,29 @@ export class SillyChessApp {
         this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
       }
     }
+  }
+
+  /**
+   * Request tactical analysis for a position (debounced to avoid API spam).
+   * Skips analysis while the AI is thinking.
+   */
+  private requestTacticsUpdate(fen: string): void {
+    if (this.state.isThinking) return;
+
+    if (this.tacticsDebounceTimer) {
+      clearTimeout(this.tacticsDebounceTimer);
+    }
+
+    this.tacticsPanel.setLoading();
+
+    this.tacticsDebounceTimer = setTimeout(async () => {
+      try {
+        const patterns = await this.tacticsClient.detectTactics(fen);
+        this.tacticsPanel.setPatterns(patterns);
+      } catch {
+        this.tacticsPanel.setPatterns([]);
+      }
+    }, 400);
   }
 
   /**
@@ -1097,6 +1154,7 @@ export class SillyChessApp {
     }
 
     this.setStatus(statusText);
+    this.updateExplainButtonVisibility();
     this.showPostGameModal(outcome, headline, subtitle);
 
     // Run post-game analysis in the background
@@ -1122,6 +1180,58 @@ export class SillyChessApp {
 
     // Reset eval bar but keep move list and board for post-game review
     this.evalBar.reset();
+  }
+
+  /**
+   * Handle explain - get AI explanation of current position
+   */
+  private async handleExplain(): Promise<void> {
+    // Determine the FEN for the displayed position
+    let fen: string;
+    if (this.state.viewingHistoryIndex === -1) {
+      fen = this.state.fen;
+    } else if (this.state.viewingHistoryIndex === -2) {
+      fen = this.START_FEN;
+    } else {
+      fen = this.state.fenHistory[this.state.viewingHistoryIndex] || this.state.fen;
+    }
+
+    // Build evaluation string from the eval bar's current value
+    const rawEval = this.evalBar.getEvaluation();
+    const evalText = typeof rawEval === 'string' ? rawEval : `${(rawEval / 100).toFixed(2)} pawns`;
+
+    // Try to get best move from stockfish for context
+    let bestMove: string | undefined;
+    if (this.stockfish?.isReady()) {
+      try {
+        const analysis = await this.stockfish.analyze(fen, { depth: 12 });
+        bestMove = analysis.bestMove;
+      } catch {
+        // Analysis optional for explanation
+      }
+    }
+
+    await this.explanationPanel.explain({
+      fen,
+      evaluation: evalText,
+      bestMove,
+      playerColor: this.state.playerColor,
+      moveHistory: this.state.sanMoves,
+    });
+  }
+
+  /**
+   * Update explain button visibility.
+   * Show during review (history browsing or game over), hide during active play.
+   */
+  private updateExplainButtonVisibility(): void {
+    const isReviewing = this.state.viewingHistoryIndex !== -1 || !this.state.isGameActive;
+    const hasMoves = this.state.sanMoves.length > 0;
+    this.explanationPanel.setButtonVisible(isReviewing && hasMoves);
+    // Dismiss the panel when switching away from review mode
+    if (!isReviewing) {
+      this.explanationPanel.removePanel();
+    }
   }
 
   /**

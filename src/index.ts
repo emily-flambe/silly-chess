@@ -386,6 +386,114 @@ app.post('/api/games/:id/resign', async (c) => {
   }
 });
 
+// ============================================
+// AI Explanation Endpoint
+// ============================================
+
+// Explain a chess position using Claude API
+app.post('/api/explain', async (c) => {
+  const apiKey = c.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return c.json({ error: 'ANTHROPIC_API_KEY not configured' }, 503);
+  }
+
+  try {
+    const body = await c.req.json() as {
+      fen: string;
+      evaluation: string;
+      bestMove?: string;
+      pvLine?: string[];
+      playerColor?: string;
+      moveHistory?: string[];
+    };
+
+    if (!body.fen) {
+      return c.json({ error: 'FEN is required' }, 400);
+    }
+
+    const userMessageParts = [`Position (FEN): ${body.fen}`, `Evaluation: ${body.evaluation}`];
+    if (body.bestMove) userMessageParts.push(`Best move: ${body.bestMove}`);
+    if (body.pvLine?.length) userMessageParts.push(`Principal variation: ${body.pvLine.join(' ')}`);
+    if (body.playerColor) userMessageParts.push(`Player is: ${body.playerColor}`);
+    if (body.moveHistory?.length) {
+      const recent = body.moveHistory.slice(-10);
+      userMessageParts.push(`Recent moves: ${recent.join(' ')}`);
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 300,
+          system: 'You are a chess coach explaining positions to an intermediate chess learner. Be concise (2-4 sentences). Focus on the key positional or tactical themes. Mention specific pieces and squares. Don\'t just restate the evaluation — explain WHY the position favors one side.',
+          messages: [{ role: 'user', content: userMessageParts.join('\n') }],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error('Claude API error:', response.status, errorBody);
+        return c.json({ error: 'AI explanation failed' }, 502);
+      }
+
+      const result = await response.json() as {
+        content: Array<{ type: string; text: string }>;
+      };
+
+      const explanation = result.content
+        ?.filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join('') || 'No explanation generated.';
+
+      return c.json({ explanation });
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return c.json({ error: 'Explanation request timed out' }, 504);
+    }
+    console.error('Explain error:', error);
+    return c.json({ error: 'Failed to generate explanation' }, 500);
+  }
+});
+
+// Proxy for ChessGrammar API (avoids CORS issues from browser)
+app.get('/api/tactics', async (c) => {
+  const fen = c.req.query('fen');
+  if (!fen) {
+    return c.json({ error: 'Missing fen parameter' }, 400);
+  }
+
+  try {
+    const response = await fetch('https://chessgrammar.com/api/v1/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fen, depth: 'l1' }),
+    });
+
+    if (!response.ok) {
+      return c.json({ error: 'ChessGrammar API error', status: response.status }, response.status as 400);
+    }
+
+    const data = await response.json();
+    return c.json(data);
+  } catch (error) {
+    console.error('ChessGrammar proxy error:', error);
+    return c.json({ error: 'Failed to reach ChessGrammar API' }, 502);
+  }
+});
+
 // SPA fallback for client-side routing (e.g., /game/:id)
 app.get('/game/*', async (c) => {
   // Serve index.html for game routes so client-side router can handle them
