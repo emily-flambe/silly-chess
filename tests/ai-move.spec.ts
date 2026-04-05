@@ -21,15 +21,18 @@ test.describe('AI Move Tests', () => {
     await expect(page.locator('#board-container')).toBeVisible();
 
     // Wait for "Ready" status (engine loaded)
-    await expect(page.locator('#status-container')).toContainText('Ready', { timeout: 20000 });
+    await expect(page.locator('#status-container')).toContainText(/Ready|Choose a game mode/, { timeout: 20000 });
 
     // Get initial board state - count the number of pieces on specific squares
     // In the starting position, e2 should have a white pawn
     const initialE2 = await page.locator('[data-square="e2"] .piece').count();
     expect(initialE2).toBe(1);
 
-    // Start game as white via modal (mode selection → color selection)
-    await page.getByRole('button', { name: /new game/i }).click();
+    // Start game as white via modal (auto-opens on first visit)
+    const modal1 = page.locator('.game-modal');
+    if (!(await modal1.isVisible())) {
+      await page.getByRole('button', { name: /new game/i }).click();
+    }
     await page.locator('.mode-btn[data-mode="vs-ai"]').click();
     await page.locator('.color-btn[data-color="white"]').click();
 
@@ -84,15 +87,18 @@ test.describe('AI Move Tests', () => {
 
     await page.goto('/');
     await expect(page.locator('#board-container')).toBeVisible();
-    await expect(page.locator('#status-container')).toContainText('Ready', { timeout: 20000 });
+    await expect(page.locator('#status-container')).toContainText(/Ready|Choose a game mode/, { timeout: 20000 });
 
     // Get initial position - rank 2 should have white pieces (pawns)
     // Pieces use class "piece piece-white" or "piece piece-black"
     const initialWhitePiecesOn2 = await page.locator('[data-square$="2"] .piece.piece-white').count();
     expect(initialWhitePiecesOn2).toBe(8);
 
-    // Start game as black via modal (mode selection → color selection)
-    await page.getByRole('button', { name: /new game/i }).click();
+    // Start game as black via modal (auto-opens on first visit)
+    const modal2 = page.locator('.game-modal');
+    if (!(await modal2.isVisible())) {
+      await page.getByRole('button', { name: /new game/i }).click();
+    }
     await page.locator('.mode-btn[data-mode="vs-ai"]').click();
     await page.locator('.color-btn[data-color="black"]').click();
 

@@ -85,7 +85,7 @@ export class GameControls {
     this.modal.innerHTML = `
       <div class="modal-overlay"></div>
       <div class="modal-content">
-        <h2 class="modal-title">New Game</h2>
+        <h2 class="modal-title">Play Chess</h2>
 
         <div class="modal-step modal-step-mode">
           <p class="modal-subtitle">Choose game mode</p>
@@ -597,7 +597,7 @@ export class GameControls {
   /**
    * Show new game modal
    */
-  private showModal(): void {
+  showModal(): void {
     if (this.modal) {
       // Reset to mode selection step
       const modeStep = this.modal.querySelector('.modal-step-mode') as HTMLElement;
