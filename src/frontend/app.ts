@@ -14,7 +14,9 @@ import { ChessBoard } from './components/Board';
 import { GameControls } from './components/GameControls';
 import { EvalBar } from './components/EvalBar';
 import { MoveList } from './components/MoveList';
+import { AnalysisPanel } from './components/AnalysisPanel';
 import { GameClient, GameState, GameMode, MoveResult, PlayerColor } from './GameClient';
+import { evalToWinPercent, classifyMove, type MoveClassification } from './utils/moveClassification';
 
 interface AppState {
   gameId: string | null;
@@ -28,6 +30,8 @@ interface AppState {
   fenHistory: string[]; // FEN after each move (index 0 = after first move)
   sanMoves: string[]; // SAN notation moves for display
   viewingHistoryIndex: number; // -1 = current position, 0+ = viewing historical position
+  classifications: (MoveClassification | null)[]; // Move classifications parallel to sanMoves
+  evalHistory: (number | string | null)[]; // Eval after each position (from white's perspective)
 }
 
 export class SillyChessApp {
@@ -35,8 +39,10 @@ export class SillyChessApp {
   private controls!: GameControls;
   private evalBar!: EvalBar;
   private moveList!: MoveList;
+  private analysisPanel!: AnalysisPanel;
   private stockfish!: FairyStockfishClient;
   private gameClient!: GameClient;
+  private postGameAnalysisRunning = false;
 
   private readonly START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   private evalRequestId = 0;
@@ -53,6 +59,8 @@ export class SillyChessApp {
     fenHistory: [],
     sanMoves: [],
     viewingHistoryIndex: -1, // -1 means viewing current position
+    classifications: [],
+    evalHistory: [],
   };
 
   private readonly containers: {
@@ -62,6 +70,7 @@ export class SillyChessApp {
     status: HTMLElement;
     difficultyDisplay: HTMLElement;
     moveList: HTMLElement;
+    analysis: HTMLElement;
   };
 
   constructor() {
@@ -72,8 +81,9 @@ export class SillyChessApp {
     const statusContainer = document.getElementById('status-container');
     const difficultyDisplay = document.getElementById('difficulty-display');
     const moveListContainer = document.getElementById('move-list-container');
+    const analysisContainer = document.getElementById('analysis-container');
 
-    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer) {
+    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer || !analysisContainer) {
       throw new Error('Required container elements not found');
     }
 
@@ -84,6 +94,7 @@ export class SillyChessApp {
       status: statusContainer,
       difficultyDisplay: difficultyDisplay,
       moveList: moveListContainer,
+      analysis: analysisContainer,
     };
 
     this.initialize();
@@ -109,6 +120,7 @@ export class SillyChessApp {
 
     this.evalBar = new EvalBar(this.containers.evalBar);
     this.moveList = new MoveList(this.containers.moveList);
+    this.analysisPanel = new AnalysisPanel(this.containers.analysis);
 
     // Set up event handlers
     this.setupEventHandlers();
@@ -326,6 +338,7 @@ export class SillyChessApp {
     const isWhiteMove = moveIndex % 2 === 0;
     this.setStatus(`Viewing move ${moveNum}${isWhiteMove ? '.' : '...'} (use → to continue)`);
     this.updateEvaluation(historicalFen);
+    this.updateAnalysisPanel(historicalFen);
   }
 
   /**
@@ -648,6 +661,8 @@ export class SillyChessApp {
     this.board.clearLastMove();
     this.moveList.clear();
     this.evalBar.reset();
+    this.analysisPanel.clear();
+    this.postGameAnalysisRunning = false;
 
     this.setStatus('Creating game...');
 
@@ -666,6 +681,8 @@ export class SillyChessApp {
       this.state.fenHistory = []; // Reset history for new game
       this.state.sanMoves = []; // Reset move list for new game
       this.state.viewingHistoryIndex = -1;
+      this.state.classifications = [];
+      this.state.evalHistory = [];
 
       // Save for reconnection and update URL
       localStorage.setItem('silly-chess-game-id', gameId);
@@ -897,7 +914,14 @@ export class SillyChessApp {
       // Convert to white's perspective (positive = white advantage)
       const isBlackToMove = fenToAnalyze.split(' ')[1] === 'b';
 
-      if (typeof analysis.evaluation === 'string') {
+      // Use WDL for eval bar display if available
+      if (analysis.wdl) {
+        // WDL is from side-to-move's perspective; flip for black
+        const win = isBlackToMove ? analysis.wdl.loss : analysis.wdl.win;
+        const draw = analysis.wdl.draw;
+        const loss = isBlackToMove ? analysis.wdl.win : analysis.wdl.loss;
+        this.evalBar.setWDL(win, draw, loss);
+      } else if (typeof analysis.evaluation === 'string') {
         // Mate score
         const mateMatch = analysis.evaluation.match(/^-?M(\d+)$/);
         if (mateMatch) {
@@ -915,6 +939,95 @@ export class SillyChessApp {
       }
     } catch (error) {
       console.error('Evaluation error:', error);
+    }
+  }
+
+  /**
+   * Update the analysis panel with MultiPV lines for a position
+   */
+  private async updateAnalysisPanel(fen: string): Promise<void> {
+    if (!this.stockfish?.isReady()) return;
+
+    try {
+      const lines = await this.stockfish.analyzeMultiPV(fen, { depth: 12, lines: 3 });
+      this.analysisPanel.update(lines, fen);
+    } catch (error) {
+      console.error('MultiPV analysis error:', error);
+    }
+  }
+
+  /**
+   * Run full post-game analysis: evaluate every position and classify moves
+   */
+  private async runPostGameAnalysis(): Promise<void> {
+    if (!this.stockfish?.isReady() || this.postGameAnalysisRunning) return;
+    if (this.state.fenHistory.length === 0) return;
+
+    this.postGameAnalysisRunning = true;
+    const totalMoves = this.state.fenHistory.length;
+
+    // We need eval for the starting position plus every position after each move
+    const allFens = [this.START_FEN, ...this.state.fenHistory];
+    const evals: (number | string)[] = [];
+
+    this.analysisPanel.setStatus(`Analyzing game... (0/${totalMoves})`);
+
+    try {
+      for (let i = 0; i < allFens.length; i++) {
+        // Bail out if a new game started
+        if (!this.postGameAnalysisRunning) return;
+
+        this.analysisPanel.setStatus(`Analyzing game... (${i}/${totalMoves})`);
+
+        try {
+          const analysis = await this.stockfish.analyze(allFens[i], { depth: 16 });
+          const isBlackToMove = allFens[i].split(' ')[1] === 'b';
+
+          // Convert to white's perspective
+          if (typeof analysis.evaluation === 'string') {
+            let isNegative = analysis.evaluation.startsWith('-');
+            if (isBlackToMove) isNegative = !isNegative;
+            const mateNum = analysis.evaluation.replace(/[^\d]/g, '');
+            evals.push(isNegative ? `-M${mateNum}` : `M${mateNum}`);
+          } else {
+            evals.push(isBlackToMove ? -analysis.evaluation : analysis.evaluation);
+          }
+        } catch {
+          evals.push(0); // Fallback if analysis fails for a position
+        }
+      }
+
+      // Compute classifications: compare eval before move vs eval after move
+      // evals[0] = start position, evals[1] = after move 0, etc.
+      const classifications: (MoveClassification | null)[] = [];
+
+      for (let i = 0; i < totalMoves; i++) {
+        const evalBefore = evals[i]; // Position before move i
+        const evalAfter = evals[i + 1]; // Position after move i
+
+        // Convert to win% from the moving side's perspective
+        const isWhiteMove = i % 2 === 0;
+        const wpBefore = evalToWinPercent(evalBefore);
+        const wpAfter = evalToWinPercent(evalAfter);
+
+        // From the moving side's perspective:
+        // White's perspective: wpBefore is already correct
+        // Black's perspective: invert (100 - wp)
+        const sideBefore = isWhiteMove ? wpBefore : 100 - wpBefore;
+        const sideAfter = isWhiteMove ? wpAfter : 100 - wpAfter;
+
+        classifications.push(classifyMove(sideBefore, sideAfter));
+      }
+
+      this.state.classifications = classifications;
+      this.state.evalHistory = evals;
+      this.moveList.setClassifications(classifications);
+      this.analysisPanel.setStatus('Analysis complete');
+    } catch (error) {
+      console.error('Post-game analysis error:', error);
+      this.analysisPanel.setStatus('Analysis failed');
+    } finally {
+      this.postGameAnalysisRunning = false;
     }
   }
 
@@ -985,6 +1098,10 @@ export class SillyChessApp {
 
     this.setStatus(statusText);
     this.showPostGameModal(outcome, headline, subtitle);
+
+    // Run post-game analysis in the background
+    this.updateAnalysisPanel(this.state.fen);
+    this.runPostGameAnalysis();
   }
 
   /**

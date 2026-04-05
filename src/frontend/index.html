@@ -146,9 +146,15 @@
       text-decoration: underline;
     }
 
+    /* Analysis panel (below move list) */
+    #analysis-container {
+      width: 180px;
+    }
+
     /* Responsive adjustments */
     @media (max-width: 1100px) {
-      .move-list-panel {
+      .move-list-panel,
+      #analysis-container {
         display: none;
       }
     }
@@ -242,6 +248,7 @@
           </div>
         </div>
         <div id="move-list-container" class="move-list-panel"></div>
+        <div id="analysis-container"></div>
       </div>
 
       <div class="controls-panel">
