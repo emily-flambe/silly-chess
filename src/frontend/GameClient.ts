@@ -9,6 +9,7 @@
  */
 
 export type GameStatus = 'active' | 'checkmate' | 'stalemate' | 'resigned' | 'draw';
+export type GameResult = '1-0' | '0-1' | '1/2-1/2' | '*';
 export type PlayerColor = 'white' | 'black';
 export type GameMode = 'vs-ai' | 'vs-player';
 
@@ -18,6 +19,7 @@ export interface GameState {
   fen: string;
   playerColor: PlayerColor;
   status: GameStatus;
+  result?: GameResult;
   moveHistory: string[];
   turn: 'w' | 'b';
   isCheck: boolean;

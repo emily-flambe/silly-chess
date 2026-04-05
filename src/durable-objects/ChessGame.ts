@@ -44,6 +44,7 @@ export interface GameStateMessage extends WSMessage {
   playerColor: PlayerColor;  // Your color (for this connection)
   players: Players;          // Who's playing what
   status: GameStatus;
+  result: GameResult;
   moveHistory: string[];
   turn: 'w' | 'b';
   isCheck: boolean;
@@ -769,6 +770,7 @@ export class ChessGame {
       playerColor,
       players: this.gameState.players,
       status: this.gameState.status,
+      result: this.gameState.result,
       moveHistory: this.gameState.moveHistory,
       turn: this.chess.turn(),
       isCheck: this.chess.isCheck(),
