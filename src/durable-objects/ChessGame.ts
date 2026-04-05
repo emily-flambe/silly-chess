@@ -26,6 +26,7 @@ export interface MoveMessage extends WSMessage {
   from: string;
   to: string;
   promotion?: string;
+  playerToken?: string;
 }
 
 export interface AIMoveMessage extends WSMessage {
@@ -48,6 +49,11 @@ export interface GameStateMessage extends WSMessage {
   isCheck: boolean;
   lastMove?: { from: string; to: string };
   waitingForOpponent?: boolean;  // True if vs-player and opponent hasn't joined
+}
+
+export interface ResignMessage extends WSMessage {
+  type: 'resign';
+  playerToken?: string;
 }
 
 export interface ErrorMessage extends WSMessage {
@@ -138,7 +144,7 @@ export class ChessGame {
           return this.handleMove(request);
         }
         if (url.pathname.endsWith('/resign')) {
-          return this.handleResign();
+          return this.handleResign(request);
         }
         if (url.pathname.endsWith('/ai-move')) {
           return this.handleAIMove(request);
@@ -158,12 +164,17 @@ export class ChessGame {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
 
-    // Accept the WebSocket connection (hibernation API)
-    this.state.acceptWebSocket(server);
+    // Extract player token from query string for tagging
+    const url = new URL(request.url);
+    const playerToken = url.searchParams.get('token');
+    const tags = playerToken ? [playerToken] : [];
 
-    // Send current game state if game exists
+    // Accept the WebSocket connection (hibernation API) with token tag
+    this.state.acceptWebSocket(server, tags);
+
+    // Send current game state with correct player color
     if (this.gameState) {
-      this.sendToSocket(server, this.buildGameStateMessage());
+      this.sendToSocket(server, this.buildGameStateMessage(playerToken || undefined));
     }
 
     return new Response(null, { status: 101, webSocket: client });
@@ -192,7 +203,7 @@ export class ChessGame {
           await this.processAIMove(ws, data as AIMoveMessage);
           break;
         case 'resign':
-          await this.processResign();
+          await this.processResign((data as ResignMessage).playerToken);
           break;
         case 'get_state':
           this.sendToSocket(ws, this.buildGameStateMessage());
@@ -409,8 +420,17 @@ export class ChessGame {
   /**
    * Handle resign via REST
    */
-  private async handleResign(): Promise<Response> {
-    await this.processResign();
+  private async handleResign(request?: Request): Promise<Response> {
+    let playerToken: string | undefined;
+    if (request) {
+      try {
+        const body = await request.json() as { playerToken?: string };
+        playerToken = body.playerToken;
+      } catch {
+        // No body is fine for vs-ai
+      }
+    }
+    await this.processResign(playerToken);
     return Response.json({ success: true, gameState: this.gameState });
   }
 
@@ -437,7 +457,7 @@ export class ChessGame {
    * Process player move from WebSocket
    */
   private async processMove(ws: WebSocket, data: MoveMessage): Promise<void> {
-    const result = await this.processPlayerMove(data.from, data.to, data.promotion);
+    const result = await this.processPlayerMove(data.from, data.to, data.promotion, data.playerToken);
     // ALWAYS respond to caller first to ensure they get the response even if broadcast fails
     this.sendToSocket(ws, result);
     // Then broadcast to other clients (they may have disconnected, that's ok)
@@ -530,12 +550,17 @@ export class ChessGame {
    * Internal AI move processing
    */
   private async processAIMoveInternal(
-    uciMove: string, 
+    uciMove: string,
     thinkingTime?: number,
     evaluation?: number | string
   ): Promise<MoveResultMessage | ErrorMessage> {
     if (!this.gameState || this.gameState.status !== 'active') {
       return { type: 'error', message: 'Game not active' };
+    }
+
+    // AI moves are only valid in vs-ai mode
+    if (this.gameState.gameMode === 'vs-player') {
+      return { type: 'error', message: 'AI moves not allowed in two-player games' };
     }
 
     // Load position if needed
@@ -583,11 +608,23 @@ export class ChessGame {
   /**
    * Process resignation
    */
-  private async processResign(): Promise<void> {
+  private async processResign(playerToken?: string): Promise<void> {
     if (!this.gameState) return;
 
     this.gameState.status = 'resigned';
-    this.gameState.result = this.gameState.playerColor === 'white' ? '0-1' : '1-0';
+
+    // Determine which player resigned
+    let resigningColor: PlayerColor = this.gameState.playerColor; // default for vs-ai
+    if (this.gameState.gameMode === 'vs-player' && playerToken) {
+      if (this.gameState.players.white === playerToken) {
+        resigningColor = 'white';
+      } else if (this.gameState.players.black === playerToken) {
+        resigningColor = 'black';
+      }
+    }
+
+    // The resigning player loses
+    this.gameState.result = resigningColor === 'white' ? '0-1' : '1-0';
     this.gameState.updatedAt = Date.now();
 
     await this.state.storage.put('gameState', this.gameState);
@@ -771,16 +808,32 @@ export class ChessGame {
   }
 
   /**
-   * Broadcast message to all connected clients
+   * Broadcast message to all connected clients.
+   * For game_state messages in vs-player mode, sends per-player versions with correct playerColor.
    */
   private broadcast(message: WSMessage): void {
-    const data = JSON.stringify(message);
-    // Use getWebSockets() for hibernation compatibility
     const sockets = this.state.getWebSockets();
+
+    // For game_state in vs-player, build per-player messages
+    if (message.type === 'game_state' && this.gameState?.gameMode === 'vs-player') {
+      for (const ws of sockets) {
+        try {
+          const tags = this.state.getTags(ws);
+          const token = tags.length > 0 ? tags[0] : undefined;
+          const perPlayerMsg = this.buildGameStateMessage(token);
+          ws.send(JSON.stringify(perPlayerMsg));
+        } catch {
+          // Socket will be cleaned up by webSocketClose/webSocketError
+        }
+      }
+      return;
+    }
+
+    const data = JSON.stringify(message);
     for (const ws of sockets) {
       try {
         ws.send(data);
-      } catch (error) {
+      } catch {
         // Socket will be cleaned up by webSocketClose/webSocketError
       }
     }

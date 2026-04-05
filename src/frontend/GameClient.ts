@@ -10,9 +10,11 @@
 
 export type GameStatus = 'active' | 'checkmate' | 'stalemate' | 'resigned' | 'draw';
 export type PlayerColor = 'white' | 'black';
+export type GameMode = 'vs-ai' | 'vs-player';
 
 export interface GameState {
   gameId: string;
+  gameMode?: GameMode;
   fen: string;
   playerColor: PlayerColor;
   status: GameStatus;
@@ -20,6 +22,7 @@ export interface GameState {
   turn: 'w' | 'b';
   isCheck: boolean;
   lastMove?: { from: string; to: string };
+  waitingForOpponent?: boolean;
 }
 
 export interface MoveResult {
@@ -40,6 +43,8 @@ type MessageHandler = (data: unknown) => void;
 export class GameClient {
   private ws: WebSocket | null = null;
   private gameId: string | null = null;
+  private playerToken: string | null = null;
+  private gameMode: GameMode = 'vs-ai';
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
@@ -65,27 +70,32 @@ export class GameClient {
   /**
    * Create a new game on the server
    */
-  async createGame(playerColor: PlayerColor, aiElo: number): Promise<{ gameId: string; gameState: GameState }> {
+  async createGame(playerColor: PlayerColor, aiElo: number, mode: GameMode = 'vs-ai'): Promise<{ gameId: string; gameState: GameState; playerToken?: string }> {
+    this.gameMode = mode;
+
     const response = await fetch('/api/games', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player_color: playerColor, ai_elo: aiElo }),
+      body: JSON.stringify({ player_color: playerColor, ai_elo: aiElo, mode }),
     });
 
     if (!response.ok) {
       throw new Error('Failed to create game');
     }
 
-    const data = await response.json() as { id: string; gameState?: GameState };
+    const data = await response.json() as { id: string; player_token?: string; gameState?: GameState };
     this.gameId = data.id;
+    this.playerToken = data.player_token || null;
 
-    // Connect WebSocket
+    // Connect WebSocket (with token for player identification)
     await this.connect(data.id);
 
     return {
       gameId: data.id,
+      playerToken: data.player_token,
       gameState: data.gameState || {
         gameId: data.id,
+        gameMode: mode,
         fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         playerColor,
         status: 'active',
@@ -93,6 +103,36 @@ export class GameClient {
         turn: 'w',
         isCheck: false,
       },
+    };
+  }
+
+  /**
+   * Join an existing two-player game
+   */
+  async joinGame(gameId: string): Promise<{ playerColor: PlayerColor; gameState: GameState }> {
+    this.gameMode = 'vs-player';
+
+    const response = await fetch(`/api/games/${gameId}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      const err = await response.json() as { error?: string };
+      throw new Error(err.error || 'Failed to join game');
+    }
+
+    const data = await response.json() as { id: string; player_token: string; playerColor: PlayerColor; gameState: GameState };
+    this.gameId = data.id;
+    this.playerToken = data.player_token;
+
+    // Connect WebSocket with token
+    await this.connect(data.id);
+
+    return {
+      playerColor: data.playerColor,
+      gameState: data.gameState,
     };
   }
 
@@ -122,7 +162,10 @@ export class GameClient {
   private async connect(gameId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/api/games/${gameId}/ws`;
+      let wsUrl = `${protocol}//${window.location.host}/api/games/${gameId}/ws`;
+      if (this.playerToken) {
+        wsUrl += `?token=${encodeURIComponent(this.playerToken)}`;
+      }
 
       try {
         this.ws = new WebSocket(wsUrl);
@@ -250,6 +293,7 @@ export class GameClient {
           from,
           to,
           promotion,
+          ...(this.playerToken ? { playerToken: this.playerToken } : {}),
         });
 
         // Timeout after 10 seconds
@@ -266,7 +310,7 @@ export class GameClient {
     const response = await fetch(`/api/games/${this.gameId}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to, promotion }),
+      body: JSON.stringify({ from, to, promotion, player_token: this.playerToken }),
     });
 
     if (!response.ok) {
@@ -327,12 +371,14 @@ export class GameClient {
    */
   async resign(): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.send({ type: 'resign' });
+      this.send({ type: 'resign', ...(this.playerToken ? { playerToken: this.playerToken } : {}) });
       return;
     }
 
     await fetch(`/api/games/${this.gameId}/resign`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerToken: this.playerToken }),
     });
   }
 
@@ -382,6 +428,20 @@ export class GameClient {
    */
   getGameId(): string | null {
     return this.gameId;
+  }
+
+  /**
+   * Get current game mode
+   */
+  getGameMode(): GameMode {
+    return this.gameMode;
+  }
+
+  /**
+   * Get player token (for two-player games)
+   */
+  getPlayerToken(): string | null {
+    return this.playerToken;
   }
 
   /**

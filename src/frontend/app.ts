@@ -14,10 +14,11 @@ import { ChessBoard } from './components/Board';
 import { GameControls } from './components/GameControls';
 import { EvalBar } from './components/EvalBar';
 import { MoveList } from './components/MoveList';
-import { GameClient, GameState, MoveResult, PlayerColor } from './GameClient';
+import { GameClient, GameState, GameMode, MoveResult, PlayerColor } from './GameClient';
 
 interface AppState {
   gameId: string | null;
+  gameMode: GameMode;
   playerColor: PlayerColor;
   isGameActive: boolean;
   isThinking: boolean;
@@ -41,6 +42,7 @@ export class SillyChessApp {
 
   private state: AppState = {
     gameId: null,
+    gameMode: 'vs-ai',
     playerColor: 'white',
     isGameActive: false,
     isThinking: false,
@@ -186,12 +188,13 @@ export class SillyChessApp {
    */
   private syncFromServer(gameState: GameState): void {
     this.state.gameId = gameState.gameId;
+    this.state.gameMode = gameState.gameMode || 'vs-ai';
     this.state.playerColor = gameState.playerColor;
     this.state.fen = gameState.fen;
     this.state.turn = gameState.turn;
     this.state.isGameActive = gameState.status === 'active';
     this.state.viewingHistoryIndex = -1;
-    
+
     // Rebuild FEN history from SAN moves so back/forward navigation works
     this.state.sanMoves = gameState.moveHistory || [];
     this.state.fenHistory = this.rebuildFenHistory(this.state.sanMoves);
@@ -208,6 +211,18 @@ export class SillyChessApp {
     // Handle game end
     if (gameState.status !== 'active') {
       this.handleGameEnd(gameState.status);
+    } else if (this.state.gameMode === 'vs-player') {
+      // Handle two-player specific states
+      if (gameState.waitingForOpponent) {
+        const shareUrl = `${window.location.origin}/game/${gameState.gameId}`;
+        this.setStatus(`Waiting for opponent... Share: ${shareUrl}`);
+        this.board.setInteractive(false);
+      } else {
+        const currentTurn = gameState.turn === 'w' ? 'white' : 'black';
+        const isMyTurn = currentTurn === this.state.playerColor;
+        this.board.setInteractive(isMyTurn);
+        this.setStatus(isMyTurn ? 'Your turn' : "Opponent's turn");
+      }
     }
 
     // Store game ID for reconnection
@@ -246,7 +261,7 @@ export class SillyChessApp {
     // Check game end
     if (result.isCheckmate || result.isStalemate || result.isDraw) {
       this.state.isGameActive = false;
-      
+
       if (result.isCheckmate) {
         const winner = result.turn === 'w' ? 'Black' : 'White';
         this.handleGameEnd('checkmate', `${winner} wins!`);
@@ -255,6 +270,12 @@ export class SillyChessApp {
       } else {
         this.handleGameEnd('draw');
       }
+    } else if (this.state.gameMode === 'vs-player') {
+      // In two-player mode, enable board when it's our turn
+      const currentTurn = result.turn === 'w' ? 'white' : 'black';
+      const isMyTurn = currentTurn === this.state.playerColor;
+      this.board.setInteractive(isMyTurn);
+      this.setStatus(isMyTurn ? 'Your turn' : "Opponent's turn");
     }
   }
 
@@ -339,21 +360,60 @@ export class SillyChessApp {
     }
 
     try {
+      // First try to get the game state to check if we should join
+      const response = await fetch(`/api/games/${urlGameId}`);
+      if (!response.ok) throw new Error('Game not found');
+      const serverState = await response.json() as GameState & { gameMode?: string; players?: { white: string | null; black: string | null } };
+
+      // Check if this is a vs-player game we need to join
+      const isVsPlayer = serverState.gameMode === 'vs-player';
+      const savedToken = localStorage.getItem(`silly-chess-token-${urlGameId}`);
+      const needsJoin = isVsPlayer && !savedToken && serverState.status === 'active';
+
+      if (needsJoin) {
+        // Join the game as the second player
+        const { playerColor, gameState: joinState } = await this.gameClient.joinGame(urlGameId);
+        // Save token for reconnection
+        const token = this.gameClient.getPlayerToken();
+        if (token) localStorage.setItem(`silly-chess-token-${urlGameId}`, token);
+        localStorage.setItem('silly-chess-game-id', urlGameId);
+
+        this.state.gameMode = 'vs-player';
+        this.syncFromServer({ ...joinState, playerColor, gameMode: 'vs-player' });
+        this.controls.setGameActive(true);
+        if (playerColor === 'black') this.board.flip();
+        return;
+      }
+
+      // Reconnect (restore saved token if available)
+      if (savedToken) {
+        // Manually set the token before connecting
+        (this.gameClient as unknown as { playerToken: string | null }).playerToken = savedToken;
+        (this.gameClient as unknown as { gameMode: string }).gameMode = 'vs-player';
+      }
+
       const gameState = await this.gameClient.reconnectToGame(urlGameId);
-      
+
       if (gameState.status === 'active') {
         // Active game - restore for play
         this.syncFromServer(gameState);
         this.controls.setGameActive(true);
-        this.board.setInteractive(true);
-        
+
         // Flip board if playing as black
         if (gameState.playerColor === 'black') {
           this.board.flip();
         }
 
-        this.setStatus('Game restored - Your turn');
-        await this.updateEvaluation();
+        if (this.state.gameMode === 'vs-player') {
+          const currentTurn = gameState.turn === 'w' ? 'white' : 'black';
+          const isMyTurn = currentTurn === this.state.playerColor;
+          this.board.setInteractive(isMyTurn);
+          this.setStatus(isMyTurn ? 'Your turn' : "Opponent's turn");
+        } else {
+          this.board.setInteractive(true);
+          this.setStatus('Game restored - Your turn');
+          await this.updateEvaluation();
+        }
       } else {
         // Completed game - load for review
         this.loadCompletedGame(gameState);
@@ -442,13 +502,13 @@ export class SillyChessApp {
    */
   private setupEventHandlers(): void {
     // Board move handler
-    this.board.onMove((from, to) => {
-      this.handlePlayerMove(from, to);
+    this.board.onMove((from, to, promotion) => {
+      this.handlePlayerMove(from, to, promotion);
     });
 
     // Control handlers
-    this.controls.onNewGame((color) => {
-      this.startNewGame(color);
+    this.controls.onNewGame((options) => {
+      this.startNewGame(options.color, options.mode);
     });
 
     this.controls.onResign(() => {
@@ -531,7 +591,7 @@ export class SillyChessApp {
   /**
    * Start a new game
    */
-  private async startNewGame(playerColor: PlayerColor): Promise<void> {
+  private async startNewGame(playerColor: PlayerColor, mode: GameMode = 'vs-ai'): Promise<void> {
     // Stop any pending analysis
     if (this.stockfish?.isReady()) {
       await this.stockfish.stop();
@@ -547,10 +607,11 @@ export class SillyChessApp {
 
     try {
       // Create game on server
-      const { gameId, gameState } = await this.gameClient.createGame(playerColor, this.state.aiElo);
+      const { gameId, gameState } = await this.gameClient.createGame(playerColor, this.state.aiElo, mode);
 
       // Update local state
       this.state.gameId = gameId;
+      this.state.gameMode = mode;
       this.state.playerColor = playerColor;
       this.state.isGameActive = true;
       this.state.isThinking = false;
@@ -562,6 +623,10 @@ export class SillyChessApp {
 
       // Save for reconnection and update URL
       localStorage.setItem('silly-chess-game-id', gameId);
+      if (mode === 'vs-player') {
+        const token = this.gameClient.getPlayerToken();
+        if (token) localStorage.setItem(`silly-chess-token-${gameId}`, token);
+      }
       this.updateUrlForGame(gameId);
 
       // Update UI
@@ -576,15 +641,23 @@ export class SillyChessApp {
         this.board.unflip();
       }
 
-      this.setStatus(`Game started - You play as ${playerColor}`);
+      if (mode === 'vs-player') {
+        // Show share link for two-player game
+        const shareUrl = `${window.location.origin}/game/${gameId}`;
+        this.setStatus(`Waiting for opponent... Share this link: ${shareUrl}`);
+        // Disable board until opponent joins
+        this.board.setInteractive(false);
+      } else {
+        this.setStatus(`Game started - You play as ${playerColor}`);
 
-      // If playing as black, let AI make first move
-      if (playerColor === 'black') {
-        await this.makeAIMove();
+        // If playing as black, let AI make first move
+        if (playerColor === 'black') {
+          await this.makeAIMove();
+        }
+
+        // Run initial evaluation
+        await this.updateEvaluation();
       }
-
-      // Run initial evaluation
-      await this.updateEvaluation();
     } catch (error) {
       console.error('Failed to create game:', error);
       this.setStatus('Failed to create game');
@@ -594,7 +667,7 @@ export class SillyChessApp {
   /**
    * Handle player move
    */
-  private async handlePlayerMove(from: string, to: string): Promise<void> {
+  private async handlePlayerMove(from: string, to: string, promotion?: string): Promise<void> {
     if (!this.state.isGameActive || this.state.isThinking) {
       return;
     }
@@ -618,7 +691,7 @@ export class SillyChessApp {
 
     try {
       // Send move to server
-      const result = await this.gameClient.makeMove(from, to);
+      const result = await this.gameClient.makeMove(from, to, promotion);
 
       if (!result.success) {
         this.setStatus('Invalid move');
@@ -647,9 +720,15 @@ export class SillyChessApp {
         return; // Game end handled in handleMoveResult
       }
 
-      // Update evaluation and make AI move
-      await this.updateEvaluation();
-      await this.makeAIMove();
+      if (this.state.gameMode === 'vs-player') {
+        // In two-player mode, wait for opponent's move via WebSocket
+        this.board.setInteractive(false);
+        this.setStatus("Opponent's turn");
+      } else {
+        // Update evaluation and make AI move
+        await this.updateEvaluation();
+        await this.makeAIMove();
+      }
     } catch (error) {
       console.error('Move failed:', error);
       this.setStatus('Move failed - try again');
@@ -844,9 +923,7 @@ export class SillyChessApp {
       console.error('Resign failed:', error);
     }
 
-    // Reset board display
-    this.board.clearLastMove();
-    this.moveList.clear();
+    // Reset eval bar but keep move list and board for post-game review
     this.evalBar.reset();
   }
 
