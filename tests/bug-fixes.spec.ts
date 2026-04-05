@@ -9,10 +9,13 @@ async function makeMove(page: Page, from: string, to: string): Promise<void> {
 }
 
 /**
- * Helper to start a new game vs CPU through the modal
+ * Helper to start a new game vs CPU through the modal (may already be open on first visit)
  */
 async function startGameVsCpu(page: Page, color: 'white' | 'black'): Promise<void> {
-  await page.getByRole('button', { name: /new game/i }).click();
+  const modal = page.locator('.game-modal');
+  if (!(await modal.isVisible())) {
+    await page.getByRole('button', { name: /new game/i }).click();
+  }
   await page.locator('.mode-btn[data-mode="vs-ai"]').click();
   await page.locator(`.color-btn[data-color="${color}"]`).click();
 }
@@ -26,7 +29,7 @@ test.describe('Bug Fixes', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#board-container')).toBeVisible();
-    await expect(page.locator('#status-container')).toContainText('Ready', { timeout: 30000 });
+    await expect(page.locator('#status-container')).toContainText(/Ready|Choose a game mode/, { timeout: 30000 });
   });
 
   // Skip on CI: Stockfish WASM is too slow and times out on GitHub runners
@@ -122,7 +125,7 @@ test.describe('Legal Move Indicators', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#board-container')).toBeVisible();
-    await expect(page.locator('#status-container')).toContainText('Ready', { timeout: 30000 });
+    await expect(page.locator('#status-container')).toContainText(/Ready|Choose a game mode/, { timeout: 30000 });
   });
 
   test('Legal move dots appear when selecting a piece', async ({ page }) => {
@@ -201,7 +204,7 @@ test.describe('Move History Navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#board-container')).toBeVisible();
-    await expect(page.locator('#status-container')).toContainText('Ready', { timeout: 30000 });
+    await expect(page.locator('#status-container')).toContainText(/Ready|Choose a game mode/, { timeout: 30000 });
   });
 
   // TODO: Fix history navigation feature - currently fenHistory is empty on reconnect
