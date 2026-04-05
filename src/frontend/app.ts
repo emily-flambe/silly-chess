@@ -214,7 +214,7 @@ export class SillyChessApp {
 
     // Handle game end
     if (gameState.status !== 'active') {
-      this.handleGameEnd(gameState.status);
+      this.handleGameEnd(gameState.status, undefined, gameState.result);
     } else if (this.state.gameMode === 'vs-player') {
       // Handle two-player specific states
       if (gameState.waitingForOpponent) {
@@ -879,7 +879,7 @@ export class SillyChessApp {
   /**
    * Handle game end
    */
-  private handleGameEnd(status: string, extraMessage?: string): void {
+  private handleGameEnd(status: string, extraMessage?: string, result?: string): void {
     this.state.isGameActive = false;
     this.state.isThinking = false;
     this.board.setInteractive(false);
@@ -888,36 +888,61 @@ export class SillyChessApp {
     // Clear saved game from localStorage (URL is kept for sharing/review)
     localStorage.removeItem('silly-chess-game-id');
 
-    // Build status message with review hint
-    let message = '';
-    const reviewHint = ' Use ← → to review.';
-    
+    // Determine outcome and messages
+    let outcome: 'win' | 'loss' | 'draw';
+    let headline: string;
+    let subtitle: string;
+    const statusText = 'Use ← → to review the game.';
+
     switch (status) {
-      case 'checkmate':
-        if (extraMessage) {
-          message = extraMessage + reviewHint;
-        } else {
-          // Determine winner based on whose turn it is (loser's turn when checkmated)
-          const playerWon = (this.state.playerColor === 'white' && this.state.turn === 'b') ||
-                           (this.state.playerColor === 'black' && this.state.turn === 'w');
-          message = playerWon ? '🏆 You won by checkmate!' : '💀 Checkmate - you lost.';
-          message += reviewHint;
-        }
+      case 'checkmate': {
+        const playerWon = (this.state.playerColor === 'white' && this.state.turn === 'b') ||
+                         (this.state.playerColor === 'black' && this.state.turn === 'w');
+        outcome = playerWon ? 'win' : 'loss';
+        headline = playerWon ? 'You won!' : 'You lost';
+        subtitle = 'by checkmate';
         break;
+      }
       case 'stalemate':
-        message = '🤝 Stalemate - draw!' + reviewHint;
+        outcome = 'draw';
+        headline = 'Draw';
+        subtitle = 'by stalemate';
         break;
       case 'draw':
-        message = '🤝 Game drawn.' + reviewHint;
+        outcome = 'draw';
+        headline = 'Draw';
+        subtitle = 'by agreement';
         break;
-      case 'resigned':
-        message = '🏳️ Game resigned.' + reviewHint;
+      case 'resigned': {
+        // Determine if WE resigned or the opponent did using the game result
+        const playerIsWhite = this.state.playerColor === 'white';
+        const playerWonResign = (playerIsWhite && result === '1-0') || (!playerIsWhite && result === '0-1');
+        if (extraMessage) {
+          // Called from handleResign() — we resigned
+          outcome = 'loss';
+          headline = 'You resigned';
+          subtitle = extraMessage;
+        } else if (playerWonResign) {
+          // Opponent resigned
+          outcome = 'win';
+          headline = 'You won!';
+          subtitle = 'by resignation';
+        } else {
+          // Fallback (our own resign via server sync, or unknown)
+          outcome = 'loss';
+          headline = 'You resigned';
+          subtitle = 'Better luck next time';
+        }
         break;
+      }
       default:
-        message = 'Game over.' + reviewHint;
+        outcome = 'draw';
+        headline = 'Game over';
+        subtitle = '';
     }
 
-    this.setStatus(message);
+    this.setStatus(statusText);
+    this.showPostGameModal(outcome, headline, subtitle);
   }
 
   /**
@@ -971,6 +996,176 @@ export class SillyChessApp {
       console.error('Hint error:', error);
       this.setStatus('Could not calculate hint');
     }
+  }
+
+  /**
+   * Show post-game modal with result and action buttons
+   */
+  private showPostGameModal(outcome: 'win' | 'loss' | 'draw', headline: string, subtitle: string): void {
+    this.removePostGameModal();
+    this.injectPostGameStyles();
+
+    const modal = document.createElement('div');
+    modal.className = 'postgame-modal';
+    modal.innerHTML = `
+      <div class="postgame-overlay"></div>
+      <div class="postgame-content">
+        <div class="postgame-header postgame-${outcome}">
+          <span class="postgame-icon">${outcome === 'win' ? '🏆' : outcome === 'loss' ? '💀' : '🤝'}</span>
+          <h2 class="postgame-headline">${headline}</h2>
+          <p class="postgame-subtitle">${subtitle}</p>
+        </div>
+        <div class="postgame-actions">
+          <button class="postgame-btn postgame-btn-review">Review Game</button>
+          <button class="postgame-btn postgame-btn-new">New Game</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector('.postgame-overlay')?.addEventListener('click', () => this.removePostGameModal());
+    modal.querySelector('.postgame-btn-review')?.addEventListener('click', () => this.removePostGameModal());
+    modal.querySelector('.postgame-btn-new')?.addEventListener('click', () => {
+      this.removePostGameModal();
+      this.controls.showModal();
+    });
+  }
+
+  /**
+   * Remove post-game modal if present
+   */
+  private removePostGameModal(): void {
+    document.querySelector('.postgame-modal')?.remove();
+  }
+
+  /**
+   * Inject post-game modal styles (once)
+   */
+  private injectPostGameStyles(): void {
+    if (document.getElementById('postgame-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'postgame-styles';
+    style.textContent = `
+      .postgame-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1000;
+      }
+
+      .postgame-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(2px);
+      }
+
+      .postgame-content {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #16213e;
+        border-radius: 12px;
+        overflow: hidden;
+        min-width: 340px;
+        max-width: 420px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        animation: postgame-pop 0.25s ease-out;
+      }
+
+      @keyframes postgame-pop {
+        from { transform: translate(-50%, -50%) scale(0.9); opacity: 0; }
+        to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+      }
+
+      .postgame-header {
+        padding: 28px 32px 20px;
+        text-align: center;
+      }
+
+      .postgame-win { background: linear-gradient(135deg, #2d5a27, #1a3a15); }
+      .postgame-loss { background: linear-gradient(135deg, #5a2727, #3a1515); }
+      .postgame-draw { background: linear-gradient(135deg, #4a4e69, #33364d); }
+
+      .postgame-icon {
+        font-size: 48px;
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .postgame-headline {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+        color: #fff;
+      }
+
+      .postgame-subtitle {
+        margin: 6px 0 0;
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .postgame-actions {
+        display: flex;
+        gap: 12px;
+        padding: 20px 32px 24px;
+        justify-content: center;
+      }
+
+      .postgame-btn {
+        flex: 1;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .postgame-btn:hover {
+        transform: translateY(-2px);
+      }
+
+      .postgame-btn-review {
+        background: #4a4e69;
+        color: #eee;
+      }
+
+      .postgame-btn-review:hover {
+        background: #5c6078;
+      }
+
+      .postgame-btn-new {
+        background: #829769;
+        color: #fff;
+      }
+
+      .postgame-btn-new:hover {
+        background: #93a87a;
+      }
+
+      @media (max-width: 500px) {
+        .postgame-content {
+          min-width: 280px;
+          max-width: 90vw;
+        }
+
+        .postgame-actions {
+          flex-direction: column;
+        }
+      }
+    `;
+    document.head.appendChild(style);
   }
 
   /**
