@@ -751,12 +751,14 @@ export class SillyChessApp {
 
     this.state.isThinking = true;
     this.board.setInteractive(false);
+    this.board.setThinking(true);
     this.setStatus('AI is thinking...');
     
     // Overall timeout to prevent permanent hangs
     const overallTimeout = setTimeout(() => {
       console.error('makeAIMove: Overall timeout - forcing recovery');
       this.state.isThinking = false;
+      this.board.setThinking(false);
       if (this.state.isGameActive) {
         this.board.setInteractive(true);
       }
@@ -822,6 +824,7 @@ export class SillyChessApp {
     } finally {
       clearTimeout(overallTimeout);
       this.state.isThinking = false;
+      this.board.setThinking(false);
       if (this.state.isGameActive) {
         this.board.setInteractive(true);
       }

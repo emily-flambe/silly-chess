@@ -28,6 +28,8 @@ export class GameControls {
   private hintCallbacks: Array<() => void> = [];
   private coordinatesChangeCallbacks: Array<(show: boolean) => void> = [];
 
+  private resignConfirmVisible: boolean = false;
+
   private readonly STORAGE_KEY_COORDS = 'silly-chess-show-coords';
 
   constructor(container: HTMLElement) {
@@ -537,6 +539,38 @@ export class GameControls {
         cursor: pointer;
         accent-color: #829769;
       }
+
+      /* Resign Confirmation */
+      .resign-confirm {
+        grid-column: 1 / -1;
+        text-align: center;
+      }
+
+      .resign-confirm-text {
+        color: #eee;
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+
+      .resign-confirm-buttons {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+      }
+
+      .resign-confirm-yes {
+        background: #c0392b !important;
+        color: #fff !important;
+      }
+
+      .resign-confirm-yes:hover:not(:disabled) {
+        background: #e74c3c !important;
+      }
+
+      .resign-confirm-no {
+        background: #4a4e69 !important;
+      }
     `;
 
     if (!document.head.querySelector('style[data-component="game-controls"]')) {
@@ -602,11 +636,72 @@ export class GameControls {
   }
 
   /**
-   * Handle resign action
+   * Handle resign action — show inline confirmation
    */
   private handleResign(): void {
-    if (!this.gameActive) return;
-    this.resignCallbacks.forEach(callback => callback());
+    if (!this.gameActive || this.resignConfirmVisible) return;
+    this.showResignConfirm();
+  }
+
+  /**
+   * Show inline resign confirmation in the controls area
+   */
+  private showResignConfirm(): void {
+    this.resignConfirmVisible = true;
+    const controlButtons = this.container.querySelector('.control-buttons') as HTMLElement;
+    if (!controlButtons) return;
+
+    controlButtons.innerHTML = `
+      <div class="resign-confirm">
+        <p class="resign-confirm-text">Resign this game?</p>
+        <div class="resign-confirm-buttons">
+          <button class="control-btn resign-confirm-yes">Yes, resign</button>
+          <button class="control-btn resign-confirm-no">Cancel</button>
+        </div>
+      </div>
+    `;
+
+    const yesBtn = controlButtons.querySelector('.resign-confirm-yes');
+    const noBtn = controlButtons.querySelector('.resign-confirm-no');
+
+    yesBtn?.addEventListener('click', () => {
+      this.hideResignConfirm();
+      this.resignCallbacks.forEach(callback => callback());
+    });
+
+    noBtn?.addEventListener('click', () => {
+      this.hideResignConfirm();
+    });
+  }
+
+  /**
+   * Hide resign confirmation and restore normal controls
+   */
+  private hideResignConfirm(): void {
+    this.resignConfirmVisible = false;
+    const controlButtons = this.container.querySelector('.control-buttons') as HTMLElement;
+    if (!controlButtons) return;
+
+    controlButtons.innerHTML = `
+      <button class="control-btn new-game-btn">
+        <span class="btn-icon">+</span>
+        New Game
+      </button>
+      <button class="control-btn resign-btn" ${!this.gameActive ? 'disabled' : ''}>
+        <span class="btn-icon">X</span>
+        Resign
+      </button>
+      <button class="control-btn hint-btn" ${!this.gameActive ? 'disabled' : ''}>
+        <span class="btn-icon">?</span>
+        Hint
+      </button>
+      <button class="control-btn settings-btn">
+        <span class="btn-icon">⚙</span>
+        Settings
+      </button>
+    `;
+
+    this.attachEventListeners();
   }
 
   /**

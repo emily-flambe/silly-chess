@@ -528,6 +528,13 @@ export class ChessBoard {
   }
 
   /**
+   * Show or hide the AI-thinking indicator (pulsing border glow)
+   */
+  setThinking(thinking: boolean): void {
+    this.boardElement.classList.toggle('ai-thinking', thinking);
+  }
+
+  /**
    * Enable or disable interactivity
    */
   setInteractive(enabled: boolean): void {

@@ -121,8 +121,9 @@ export class EvalBar {
 
   /**
    * Update the evaluation text display
+   * @param whitePercent - current bar fill percentage for white, used to pick a readable text color
    */
-  private updateEvalText(value: number | string): void {
+  private updateEvalText(value: number | string, whitePercent: number): void {
     if (typeof value === 'string') {
       // Mate evaluation (e.g., "M3")
       const mateNum = parseInt(value.substring(1));
@@ -136,9 +137,11 @@ export class EvalBar {
       this.evalText.textContent = formatted;
     }
 
-    // Adjust text color based on which side has advantage
-    const isWhiteAdvantage = typeof value === 'string' || value >= 0;
-    this.evalText.style.color = isWhiteAdvantage ? '#333' : '#fff';
+    // Text sits at 50% of the bar; pick a color that contrasts with whichever
+    // section is behind it.  When white fills > 50% the midpoint is on the
+    // light section → use dark text; otherwise the midpoint is on the dark
+    // section → use light text.
+    this.evalText.style.color = whitePercent > 50 ? '#333' : '#fff';
   }
 
   /**
@@ -149,7 +152,7 @@ export class EvalBar {
 
     const whitePercent = this.evalToPercent(value);
     this.updateBarHeights(whitePercent);
-    this.updateEvalText(value);
+    this.updateEvalText(value, whitePercent);
   }
 
   /**
@@ -162,7 +165,7 @@ export class EvalBar {
     // Mate = 95% for winning side
     const whitePercent = moves > 0 ? 95 : 5;
     this.updateBarHeights(whitePercent);
-    this.updateEvalText(mateString);
+    this.updateEvalText(mateString, whitePercent);
   }
 
   /**
