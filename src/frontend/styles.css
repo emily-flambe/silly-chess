@@ -124,6 +124,16 @@ body {
   background-color: #ced26b !important;
 }
 
+/* Best Move Highlight (shown during post-game review) */
+.square.best-move-from {
+  box-shadow: inset 0 0 0 3px rgba(130, 151, 105, 0.9);
+}
+
+.square.best-move-to {
+  background-color: rgba(130, 151, 105, 0.45) !important;
+  box-shadow: inset 0 0 0 3px rgba(130, 151, 105, 0.9);
+}
+
 /* Hint Highlight */
 .square.hint {
   background-color: #5dade2 !important;

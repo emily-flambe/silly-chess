@@ -21,6 +21,7 @@ import { evalToWinPercent, classifyMove, type MoveClassification } from './utils
 import { ChessGrammarClient } from './services/ChessGrammarClient';
 import { TacticsPanel } from './components/TacticsPanel';
 import { LearnPanel, type MistakeEntry } from './components/LearnPanel';
+import { MoveReviewPanel, uciToSanSequence, type MoveAnalysis } from './components/MoveReviewPanel';
 
 interface AppState {
   gameId: string | null;
@@ -36,6 +37,7 @@ interface AppState {
   viewingHistoryIndex: number; // -1 = current position, 0+ = viewing historical position
   classifications: (MoveClassification | null)[]; // Move classifications parallel to sanMoves
   evalHistory: (number | string | null)[]; // Eval after each position (from white's perspective)
+  moveAnalyses: (MoveAnalysis | null)[]; // Best move + PV for each position (parallel to sanMoves)
 }
 
 export class SillyChessApp {
@@ -51,6 +53,7 @@ export class SillyChessApp {
   private tacticsPanel!: TacticsPanel;
   private tacticsClient!: ChessGrammarClient;
   private learnPanel!: LearnPanel;
+  private moveReviewPanel!: MoveReviewPanel;
 
   private readonly START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   private evalRequestId = 0;
@@ -70,6 +73,7 @@ export class SillyChessApp {
     viewingHistoryIndex: -1, // -1 means viewing current position
     classifications: [],
     evalHistory: [],
+    moveAnalyses: [],
   };
 
   private readonly containers: {
@@ -138,6 +142,7 @@ export class SillyChessApp {
     this.learnPanel = new LearnPanel(this.containers.analysis.parentElement || this.containers.analysis);
     this.learnPanel.onNext(() => this.navigateToCurrentLearnMistake());
     this.learnPanel.onExit(() => this.exitLearnMode());
+    this.moveReviewPanel = new MoveReviewPanel(this.containers.analysis.parentElement || this.containers.analysis);
 
     // Create explanation panel (below the status bar)
     this.explanationPanel = new ExplanationPanel(this.containers.status.parentElement!);
@@ -329,10 +334,12 @@ export class SillyChessApp {
       this.state.viewingHistoryIndex = -1;
       this.board.setPosition(this.state.fen);
       this.board.setInteractive(this.state.isGameActive && !this.state.isThinking);
+      this.board.clearBestMove();
       this.setStatus(this.state.isGameActive ? 'Your turn' : 'Game over');
       this.updateEvaluation(this.state.fen);
       this.requestTacticsUpdate(this.state.fen);
       this.updateExplainButtonVisibility();
+      this.updateMoveReview(this.state.sanMoves.length - 1);
       return;
     }
 
@@ -341,11 +348,13 @@ export class SillyChessApp {
       this.state.viewingHistoryIndex = -2;
       this.board.setPosition(this.START_FEN);
       this.board.clearLastMove();
+      this.board.clearBestMove();
       this.board.setInteractive(false);
       this.setStatus('Start position (use \u2192 to step forward)');
       this.updateEvaluation(this.START_FEN);
       this.requestTacticsUpdate(this.START_FEN);
       this.updateExplainButtonVisibility();
+      this.moveReviewPanel.hide();
       return;
     }
 
@@ -368,6 +377,7 @@ export class SillyChessApp {
     this.updateAnalysisPanel(historicalFen);
     this.requestTacticsUpdate(historicalFen);
     this.updateExplainButtonVisibility();
+    this.updateMoveReview(moveIndex);
   }
 
   /**
@@ -704,6 +714,7 @@ export class SillyChessApp {
     this.tacticsPanel.clear();
     this.tacticsClient.clearCache();
     this.learnPanel.deactivate();
+    this.moveReviewPanel.hide();
     this.explanationPanel.removePanel();
     this.explanationPanel.setButtonVisible(false);
 
@@ -726,6 +737,7 @@ export class SillyChessApp {
       this.state.viewingHistoryIndex = -1;
       this.state.classifications = [];
       this.state.evalHistory = [];
+      this.state.moveAnalyses = [];
 
       // Save for reconnection and update URL
       localStorage.setItem('silly-chess-game-id', gameId);
@@ -1012,6 +1024,62 @@ export class SillyChessApp {
   }
 
   /**
+   * Show per-move review annotation for the given move index.
+   * Only shows when post-game analysis is complete.
+   */
+  private updateMoveReview(moveIndex: number): void {
+    // Only show during post-game review when analysis is done
+    if (this.state.isGameActive || this.state.classifications.length === 0) {
+      this.moveReviewPanel.hide();
+      this.board.clearBestMove();
+      return;
+    }
+
+    if (moveIndex < 0 || moveIndex >= this.state.classifications.length) {
+      this.moveReviewPanel.hide();
+      this.board.clearBestMove();
+      return;
+    }
+
+    const classification = this.state.classifications[moveIndex];
+    if (!classification) {
+      this.moveReviewPanel.hide();
+      this.board.clearBestMove();
+      return;
+    }
+
+    const isPlayerMove = this.state.playerColor === 'white'
+      ? (moveIndex % 2 === 0)
+      : (moveIndex % 2 === 1);
+
+    // evalHistory[0] = start position eval, evalHistory[moveIndex] = before this move
+    const evalBefore = this.state.evalHistory[moveIndex] ?? null;
+    const evalAfter = this.state.evalHistory[moveIndex + 1] ?? null;
+
+    const analysis = this.state.moveAnalyses[moveIndex] ?? null;
+
+    this.moveReviewPanel.show({
+      moveSan: this.state.sanMoves[moveIndex],
+      moveIndex,
+      classification,
+      isPlayerMove,
+      evalBefore,
+      evalAfter,
+      analysis,
+    });
+
+    // Show best-move highlight on board for player mistakes/blunders
+    const isNegative = classification === 'inaccuracy' || classification === 'mistake' || classification === 'blunder';
+    if (isNegative && isPlayerMove && analysis) {
+      const from = analysis.bestMove.substring(0, 2);
+      const to = analysis.bestMove.substring(2, 4);
+      this.board.setBestMove(from, to);
+    } else {
+      this.board.clearBestMove();
+    }
+  }
+
+  /**
    * Update the analysis panel with MultiPV lines for a position
    */
   private async updateAnalysisPanel(fen: string): Promise<void> {
@@ -1036,8 +1104,11 @@ export class SillyChessApp {
     const totalMoves = this.state.fenHistory.length;
 
     // We need eval for the starting position plus every position after each move
+    // allFens[0] = start, allFens[1] = after move 0, etc.
     const allFens = [this.START_FEN, ...this.state.fenHistory];
     const evals: (number | string)[] = [];
+    // Store best move + PV for each position BEFORE a move (indices 0..totalMoves-1)
+    const analyses: (MoveAnalysis | null)[] = [];
 
     this.analysisPanel.setStatus(`Analyzing game... (0/${totalMoves})`);
 
@@ -1061,8 +1132,24 @@ export class SillyChessApp {
           } else {
             evals.push(isBlackToMove ? -analysis.evaluation : analysis.evaluation);
           }
+
+          // Store best move analysis for each position before a move
+          // (skip the last position — there's no move after it)
+          if (i < allFens.length - 1) {
+            const pvSan = analysis.pv
+              ? uciToSanSequence(analysis.pv, allFens[i])
+              : [];
+            const bestMoveSan = pvSan.length > 0 ? pvSan[0] : analysis.bestMove;
+            analyses.push({
+              bestMove: analysis.bestMove,
+              bestMoveSan,
+              pv: analysis.pv || [],
+              pvSan,
+            });
+          }
         } catch {
-          evals.push(0); // Fallback if analysis fails for a position
+          evals.push(0);
+          if (i < allFens.length - 1) analyses.push(null);
         }
       }
 
@@ -1090,6 +1177,7 @@ export class SillyChessApp {
 
       this.state.classifications = classifications;
       this.state.evalHistory = evals;
+      this.state.moveAnalyses = analyses;
       this.moveList.setClassifications(classifications);
       this.analysisPanel.setStatus('Analysis complete');
     } catch (error) {
