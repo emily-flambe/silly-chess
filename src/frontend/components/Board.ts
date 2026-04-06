@@ -40,6 +40,7 @@ export class ChessBoard {
   private selectedSquare: string | null = null;
   private legalMoves: string[] = [];
   private lastMove: { from: string; to: string } | null = null;
+  private bestMoveArrow: { from: string; to: string } | null = null;
   private moveCallbacks: MoveCallback[] = [];
 
   // FEN-based state (for server-authoritative mode)
@@ -370,6 +371,14 @@ export class ChessBoard {
       if (toSquare) toSquare.classList.add('last-move');
     }
 
+    // Show best move arrow
+    if (this.bestMoveArrow) {
+      const fromSquare = this.getSquareElement(this.bestMoveArrow.from);
+      const toSquare = this.getSquareElement(this.bestMoveArrow.to);
+      if (fromSquare) fromSquare.classList.add('best-move-from');
+      if (toSquare) toSquare.classList.add('best-move-to');
+    }
+
     // Highlight check using chess.js
     try {
       const chess = new Chess(this.currentFen);
@@ -396,7 +405,7 @@ export class ChessBoard {
   private clearBoard(): void {
     const squares = this.boardElement.querySelectorAll('.square');
     squares.forEach(square => {
-      square.classList.remove('selected', 'legal-move', 'legal-capture', 'last-move', 'in-check');
+      square.classList.remove('selected', 'legal-move', 'legal-capture', 'last-move', 'in-check', 'best-move-from', 'best-move-to');
       const piece = square.querySelector('.piece');
       if (piece) {
         piece.remove();
@@ -507,6 +516,22 @@ export class ChessBoard {
    */
   clearLastMove(): void {
     this.lastMove = null;
+    this.render();
+  }
+
+  /**
+   * Show a best-move highlight on the board (green squares)
+   */
+  setBestMove(from: string, to: string): void {
+    this.bestMoveArrow = { from, to };
+    this.render();
+  }
+
+  /**
+   * Clear the best-move highlight
+   */
+  clearBestMove(): void {
+    this.bestMoveArrow = null;
     this.render();
   }
 
