@@ -8,7 +8,7 @@ export interface Env {
   CHESS_GAME: DurableObjectNamespace;
   ASSETS: Fetcher;  // Static assets binding
   ENVIRONMENT?: string;
-  AI: Ai;  // Workers AI binding for position explanations
+  AI?: Ai;  // Workers AI binding for position explanations
 }
 
 // Chess Types

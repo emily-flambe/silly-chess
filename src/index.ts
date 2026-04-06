@@ -392,6 +392,10 @@ app.post('/api/games/:id/resign', async (c) => {
 
 // Explain a chess position using Cloudflare Workers AI (free tier: 10,000 neurons/day)
 app.post('/api/explain', async (c) => {
+  if (!c.env.AI) {
+    return c.json({ error: 'Workers AI binding not available' }, 503);
+  }
+
   try {
     const body = await c.req.json() as {
       fen: string;
