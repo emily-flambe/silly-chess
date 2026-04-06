@@ -14,6 +14,7 @@ import {
   getGame,
   listGames,
 } from './db/queries';
+import { extractExplanation } from './lib/parse-ai-response';
 
 // Re-export the Durable Object class
 export { ChessGame } from './durable-objects/ChessGame';
@@ -428,24 +429,7 @@ app.post('/api/explain', async (c) => {
       temperature: 0.6,
     });
 
-    // Responses API: extract text from output message items
-    const res = result as {
-      output?: Array<{ type: string; content?: Array<{ type: string; text?: string }> }>;
-    };
-    let explanation = 'No explanation generated.';
-    if (res.output) {
-      for (const item of res.output) {
-        if (item.type === 'message' && item.content) {
-          for (const block of item.content) {
-            if (block.type === 'output_text' && block.text) {
-              explanation = block.text;
-              break;
-            }
-          }
-        }
-        if (explanation !== 'No explanation generated.') break;
-      }
-    }
+    const explanation = extractExplanation(result);
     return c.json({ explanation });
   } catch (error) {
     console.error('Explain error:', error);
