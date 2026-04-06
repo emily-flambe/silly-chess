@@ -420,20 +420,18 @@ app.post('/api/explain', async (c) => {
     }
 
     // OpenAI GPT open-source 20B model on Cloudflare Workers AI
-    // Cast needed: model is newer than the @cloudflare/workers-types package
+    // Uses Responses API format (input + instructions), not chat completions
     const result = await c.env.AI.run('@cf/openai/gpt-oss-20b' as keyof AiModels, {
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a chess coach explaining positions to an intermediate chess learner. Be concise (2-4 sentences). Focus on the key positional or tactical themes. Mention specific pieces and squares. Don\'t just restate the evaluation — explain WHY the position favors one side. Do not use thinking tags or chain-of-thought — just give the explanation directly.',
-        },
-        { role: 'user', content: userMessageParts.join('\n') },
-      ],
+      instructions: 'You are a chess coach explaining positions to an intermediate chess learner. Be concise (2-4 sentences). Focus on the key positional or tactical themes. Mention specific pieces and squares. Don\'t just restate the evaluation — explain WHY the position favors one side. Do not use thinking tags or chain-of-thought — just give the explanation directly.',
+      input: userMessageParts.join('\n'),
       max_tokens: 256,
       temperature: 0.6,
     });
 
-    const explanation = (result as { response?: string }).response || 'No explanation generated.';
+    // Responses API returns output_text for text responses
+    const explanation = (result as { output_text?: string; response?: string }).output_text
+      || (result as { response?: string }).response
+      || 'No explanation generated.';
     return c.json({ explanation });
   } catch (error) {
     console.error('Explain error:', error);
