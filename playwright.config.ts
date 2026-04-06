@@ -23,7 +23,7 @@ export default defineConfig({
   // Only start webServer if not using custom TEST_PORT
   ...(process.env.TEST_PORT ? {} : {
     webServer: {
-      command: 'npm run dev',
+      command: process.env.CI ? 'npm run dev:test' : 'npm run dev',
       url: 'http://localhost:8787',
       reuseExistingServer: true,
       timeout: 60000,

@@ -1,0 +1,35 @@
+name = "silly-chess"
+account_id = "facf6619808dc039df729531bbb26d1d"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+
+# Custom domain routing
+routes = [
+  { pattern = "chess.emilycogsdill.com/*", zone_name = "emilycogsdill.com" }
+]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "silly-chess-db"
+database_id = "ffad9c57-6375-4161-b5fc-fccf2e534dbd"
+
+# Durable Objects for game sessions
+[durable_objects]
+bindings = [
+  { name = "CHESS_GAME", class_name = "ChessGame" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["ChessGame"]
+
+# NOTE: AI binding intentionally omitted for test environments
+# (requires remote Cloudflare auth, not available in CI)
+
+[dev]
+port = 8787
