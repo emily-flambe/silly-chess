@@ -18,6 +18,7 @@ import { AnalysisPanel } from './components/AnalysisPanel';
 import { ExplanationPanel } from './components/ExplanationPanel';
 import { GameClient, GameState, GameMode, MoveResult, PlayerColor } from './GameClient';
 import { evalToWinPercent, classifyMove, type MoveClassification } from './utils/moveClassification';
+import { toWhitePerspective } from './utils/evalPerspective';
 import { ChessGrammarClient } from './services/ChessGrammarClient';
 import { TacticsPanel } from './components/TacticsPanel';
 import { LearnPanel, type MistakeEntry } from './components/LearnPanel';
@@ -991,32 +992,14 @@ export class SillyChessApp {
       // Discard stale results if the user navigated to a different position
       if (requestId !== this.evalRequestId) return;
 
-      // Stockfish returns evaluation from side-to-move's perspective
-      // Convert to white's perspective (positive = white advantage)
-      const isBlackToMove = fenToAnalyze.split(' ')[1] === 'b';
+      const whiteEval = toWhitePerspective(analysis, fenToAnalyze);
 
-      // Use WDL for eval bar display if available
-      if (analysis.wdl) {
-        // WDL is from side-to-move's perspective; flip for black
-        const win = isBlackToMove ? analysis.wdl.loss : analysis.wdl.win;
-        const draw = analysis.wdl.draw;
-        const loss = isBlackToMove ? analysis.wdl.win : analysis.wdl.loss;
-        this.evalBar.setWDL(win, draw, loss);
-      } else if (typeof analysis.evaluation === 'string') {
-        // Mate score
-        const mateMatch = analysis.evaluation.match(/^-?M(\d+)$/);
-        if (mateMatch) {
-          const moves = parseInt(mateMatch[1], 10);
-          let isNegative = analysis.evaluation.startsWith('-');
-          if (isBlackToMove) isNegative = !isNegative;
-          this.evalBar.setMate(isNegative ? -moves : moves);
-        }
+      if (whiteEval.type === 'wdl') {
+        this.evalBar.setWDL(whiteEval.win, whiteEval.draw, whiteEval.loss);
+      } else if (whiteEval.type === 'mate') {
+        this.evalBar.setMate(whiteEval.moves);
       } else {
-        // Centipawn score
-        const evalFromWhitePerspective = isBlackToMove
-          ? -analysis.evaluation
-          : analysis.evaluation;
-        this.evalBar.setEvaluation(evalFromWhitePerspective);
+        this.evalBar.setEvaluation(whiteEval.value);
       }
     } catch (error) {
       console.error('Evaluation error:', error);
