@@ -428,10 +428,24 @@ app.post('/api/explain', async (c) => {
       temperature: 0.6,
     });
 
-    // Responses API returns output_text for text responses
-    const explanation = (result as { output_text?: string; response?: string }).output_text
-      || (result as { response?: string }).response
-      || 'No explanation generated.';
+    // Responses API: extract text from output message items
+    const res = result as {
+      output?: Array<{ type: string; content?: Array<{ type: string; text?: string }> }>;
+    };
+    let explanation = 'No explanation generated.';
+    if (res.output) {
+      for (const item of res.output) {
+        if (item.type === 'message' && item.content) {
+          for (const block of item.content) {
+            if (block.type === 'output_text' && block.text) {
+              explanation = block.text;
+              break;
+            }
+          }
+        }
+        if (explanation !== 'No explanation generated.') break;
+      }
+    }
     return c.json({ explanation });
   } catch (error) {
     console.error('Explain error:', error);
