@@ -390,13 +390,8 @@ app.post('/api/games/:id/resign', async (c) => {
 // AI Explanation Endpoint
 // ============================================
 
-// Explain a chess position using Claude API
+// Explain a chess position using Cloudflare Workers AI (free tier: 10,000 neurons/day)
 app.post('/api/explain', async (c) => {
-  const apiKey = c.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return c.json({ error: 'ANTHROPIC_API_KEY not configured' }, 503);
-  }
-
   try {
     const body = await c.req.json() as {
       fen: string;
@@ -420,49 +415,23 @@ app.post('/api/explain', async (c) => {
       userMessageParts.push(`Recent moves: ${recent.join(' ')}`);
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
+    // OpenAI GPT open-source 20B model on Cloudflare Workers AI
+    // Cast needed: model is newer than the @cloudflare/workers-types package
+    const result = await c.env.AI.run('@cf/openai/gpt-oss-20b' as keyof AiModels, {
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a chess coach explaining positions to an intermediate chess learner. Be concise (2-4 sentences). Focus on the key positional or tactical themes. Mention specific pieces and squares. Don\'t just restate the evaluation — explain WHY the position favors one side. Do not use thinking tags or chain-of-thought — just give the explanation directly.',
         },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 300,
-          system: 'You are a chess coach explaining positions to an intermediate chess learner. Be concise (2-4 sentences). Focus on the key positional or tactical themes. Mention specific pieces and squares. Don\'t just restate the evaluation — explain WHY the position favors one side.',
-          messages: [{ role: 'user', content: userMessageParts.join('\n') }],
-        }),
-        signal: controller.signal,
-      });
+        { role: 'user', content: userMessageParts.join('\n') },
+      ],
+      max_tokens: 256,
+      temperature: 0.6,
+    });
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error('Claude API error:', response.status, errorBody);
-        return c.json({ error: 'AI explanation failed' }, 502);
-      }
-
-      const result = await response.json() as {
-        content: Array<{ type: string; text: string }>;
-      };
-
-      const explanation = result.content
-        ?.filter((block) => block.type === 'text')
-        .map((block) => block.text)
-        .join('') || 'No explanation generated.';
-
-      return c.json({ explanation });
-    } finally {
-      clearTimeout(timeout);
-    }
+    const explanation = (result as { response?: string }).response || 'No explanation generated.';
+    return c.json({ explanation });
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      return c.json({ error: 'Explanation request timed out' }, 504);
-    }
     console.error('Explain error:', error);
     return c.json({ error: 'Failed to generate explanation' }, 500);
   }
