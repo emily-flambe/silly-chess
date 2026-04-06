@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:test": "wrangler dev --config wrangler.test.toml",
     "deploy": "wrangler deploy",
     "build": "tsc && vite build",
     "db:create": "wrangler d1 create silly-chess-db",

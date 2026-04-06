@@ -12,7 +12,7 @@ export class ExplanationPanel {
   private cache: Map<string, string> = new Map();
   private loading = false;
   private visible = false;
-  private dismissed503 = false;
+
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -70,14 +70,6 @@ export class ExplanationPanel {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
       });
-
-      if (response.status === 503) {
-        if (!this.dismissed503) {
-          this.showPanel('Set up ANTHROPIC_API_KEY to enable AI explanations.', true);
-          this.dismissed503 = true;
-        }
-        return;
-      }
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };

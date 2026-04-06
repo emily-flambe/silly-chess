@@ -10,7 +10,7 @@ export default defineConfig({
 
       return {
         wrangler: {
-          configPath: "./wrangler.toml",
+          configPath: "./wrangler.test.toml",
         },
         miniflare: {
           bindings: {
