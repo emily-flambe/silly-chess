@@ -247,6 +247,34 @@ describe("POST /api/games/:id/join", () => {
 });
 
 // ============================================
+// AI Explanation Endpoint
+// ============================================
+
+describe("POST /api/explain", () => {
+  // The test environment uses wrangler.test.toml which has no [ai] binding,
+  // so env.AI is undefined and the endpoint returns 503 before any validation.
+  // This verifies the guard works correctly.
+  it("returns 503 when AI binding is not available", async () => {
+    const res = await jsonPost("/api/explain", {
+      fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+      evaluation: "+0.3",
+    });
+
+    expect(res.status).toBe(503);
+    const data = (await res.json()) as Record<string, unknown>;
+    expect(data.error).toBe("Workers AI binding not available");
+  });
+
+  it("returns 503 even when FEN is missing (AI check is first)", async () => {
+    const res = await jsonPost("/api/explain", {
+      evaluation: "+0.5",
+    });
+
+    expect(res.status).toBe(503);
+  });
+});
+
+// ============================================
 // 404 Handling
 // ============================================
 
