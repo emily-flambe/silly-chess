@@ -48,19 +48,15 @@ export class GameControls {
       <div class="game-controls">
         <div class="control-buttons">
           <button class="control-btn new-game-btn">
-            <span class="btn-icon">+</span>
             New Game
           </button>
           <button class="control-btn resign-btn" ${!this.gameActive ? 'disabled' : ''}>
-            <span class="btn-icon">X</span>
             Resign
           </button>
           <button class="control-btn hint-btn" ${!this.gameActive ? 'disabled' : ''}>
-            <span class="btn-icon">?</span>
             Hint
           </button>
           <button class="control-btn settings-btn">
-            <span class="btn-icon">⚙</span>
             Settings
           </button>
         </div>
@@ -92,11 +88,9 @@ export class GameControls {
           <p class="modal-subtitle">Choose game mode</p>
           <div class="mode-selection">
             <button class="mode-btn" data-mode="vs-ai">
-              <span class="mode-icon">🤖</span>
               <span class="mode-label">vs Computer</span>
             </button>
             <button class="mode-btn" data-mode="vs-player">
-              <span class="mode-icon">👤</span>
               <span class="mode-label">vs Human</span>
             </button>
           </div>
@@ -115,15 +109,15 @@ export class GameControls {
           <p class="modal-subtitle">Choose your color</p>
           <div class="color-selection">
             <button class="color-btn" data-color="white">
-              <span class="color-icon color-icon-white">&#9812;</span>
+              <span class="color-icon color-icon-white" aria-hidden="true"></span>
               <span class="color-label">White</span>
             </button>
             <button class="color-btn" data-color="random">
-              <span class="color-icon">?</span>
+              <span class="color-icon color-icon-random" aria-hidden="true"></span>
               <span class="color-label">Random</span>
             </button>
             <button class="color-btn" data-color="black">
-              <span class="color-icon color-icon-black">&#9812;</span>
+              <span class="color-icon color-icon-black" aria-hidden="true"></span>
               <span class="color-label">Black</span>
             </button>
           </div>
@@ -330,286 +324,6 @@ export class GameControls {
         filter: brightness(1.05);
       }
 
-      /* Modal Styles */
-      .game-modal {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 1000;
-      }
-
-      .modal-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: var(--overlay, rgba(0, 0, 0, 0.55));
-        backdrop-filter: blur(4px);
-      }
-
-      .modal-content {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: var(--panel);
-        color: var(--fg);
-        border: 1px solid var(--panel-border);
-        border-radius: 12px;
-        padding: 32px;
-        min-width: 400px;
-        box-shadow: 0 8px 32px var(--shadow, rgba(0, 0, 0, 0.25));
-      }
-
-      .modal-title {
-        margin: 0 0 8px 0;
-        font-size: 24px;
-        font-weight: 700;
-        color: var(--fg);
-        text-align: center;
-      }
-
-      .modal-subtitle {
-        margin: 0 0 24px 0;
-        font-size: 14px;
-        color: var(--fg-muted);
-        text-align: center;
-      }
-
-      .color-selection {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 16px;
-        margin-bottom: 24px;
-      }
-
-      .color-btn {
-        padding: 24px 16px;
-        background: var(--btn);
-        color: var(--fg);
-        border: 2px solid var(--btn-border);
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .color-btn:hover {
-        background: var(--btn-hover);
-        border-color: var(--accent);
-        transform: translateY(-4px);
-      }
-
-      .color-icon {
-        font-size: 48px;
-      }
-
-      /* Match actual piece styling */
-      .color-icon-white {
-        color: #fff;
-        text-shadow:
-          -1px -1px 0 #000,
-          1px -1px 0 #000,
-          -1px 1px 0 #000,
-          1px 1px 0 #000,
-          0 2px 4px rgba(0, 0, 0, 0.3);
-      }
-
-      .color-icon-black {
-        color: #1a1a1a;
-        text-shadow:
-          -1px -1px 0 #888,
-          1px -1px 0 #888,
-          -1px 1px 0 #888,
-          1px 1px 0 #888,
-          0 2px 4px rgba(0, 0, 0, 0.3);
-      }
-
-      .color-label {
-        font-size: 14px;
-        font-weight: 600;
-      }
-
-      .modal-actions {
-        display: flex;
-        justify-content: center;
-        gap: 12px;
-      }
-
-      .modal-btn {
-        padding: 10px 24px;
-        background: var(--btn);
-        color: var(--fg);
-        border: 1px solid var(--btn-border);
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      }
-
-      .modal-btn:hover {
-        background: var(--btn-hover);
-      }
-
-      .mode-selection {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 16px;
-        margin-bottom: 24px;
-      }
-
-      .mode-btn {
-        padding: 24px 16px;
-        background: var(--btn);
-        color: var(--fg);
-        border: 2px solid var(--btn-border);
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-        font-size: 14px;
-        font-weight: 600;
-      }
-
-      .mode-btn:hover {
-        background: var(--btn-hover);
-        border-color: var(--accent);
-        transform: translateY(-4px);
-      }
-
-      .mode-icon {
-        font-size: 36px;
-      }
-
-      .modal-step-buttons {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 16px;
-      }
-
-      .next-btn-difficulty {
-        background: var(--accent);
-        color: var(--accent-contrast);
-        border-color: var(--accent);
-      }
-
-      .next-btn-difficulty:hover {
-        filter: brightness(1.05);
-      }
-
-      .back-btn {
-        margin-top: 12px;
-      }
-
-      /* Settings Panel Styles */
-      .settings-panel {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 1000;
-      }
-
-      .settings-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: var(--overlay, rgba(0, 0, 0, 0.55));
-        backdrop-filter: blur(4px);
-      }
-
-      .settings-content {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: var(--panel);
-        color: var(--fg);
-        border: 1px solid var(--panel-border);
-        border-radius: 12px;
-        min-width: 500px;
-        max-width: 600px;
-        box-shadow: 0 8px 32px var(--shadow, rgba(0, 0, 0, 0.25));
-      }
-
-      .settings-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 24px 24px 16px 24px;
-        border-bottom: 1px solid var(--panel-border);
-      }
-
-      .settings-title {
-        margin: 0;
-        font-size: 24px;
-        font-weight: 700;
-        color: var(--fg);
-      }
-
-      .settings-close {
-        background: none;
-        border: none;
-        color: var(--fg-muted);
-        font-size: 32px;
-        line-height: 1;
-        cursor: pointer;
-        padding: 0;
-        width: 32px;
-        height: 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: color 0.2s ease;
-      }
-
-      .settings-close:hover {
-        color: var(--fg);
-      }
-
-      .settings-body {
-        padding: 24px;
-      }
-
-      .setting-item {
-        padding: 16px;
-        background: var(--panel-alt, var(--panel));
-        border: 1px solid var(--panel-border);
-        border-radius: 8px;
-        margin-bottom: 12px;
-      }
-
-      .setting-label {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        cursor: pointer;
-        user-select: none;
-        color: var(--fg);
-        font-size: 14px;
-        font-weight: 500;
-      }
-
-      .setting-checkbox {
-        width: 20px;
-        height: 20px;
-        cursor: pointer;
-        accent-color: var(--accent);
-      }
-
       /* Resign Confirmation */
       .resign-confirm {
         grid-column: 1 / -1;
@@ -757,19 +471,15 @@ export class GameControls {
 
     controlButtons.innerHTML = `
       <button class="control-btn new-game-btn">
-        <span class="btn-icon">+</span>
         New Game
       </button>
       <button class="control-btn resign-btn" ${!this.gameActive ? 'disabled' : ''}>
-        <span class="btn-icon">X</span>
         Resign
       </button>
       <button class="control-btn hint-btn" ${!this.gameActive ? 'disabled' : ''}>
-        <span class="btn-icon">?</span>
         Hint
       </button>
       <button class="control-btn settings-btn">
-        <span class="btn-icon">⚙</span>
         Settings
       </button>
     `;

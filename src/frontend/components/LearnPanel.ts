@@ -267,7 +267,6 @@ export class LearnPanel {
     const correct = this.state.correctCount;
 
     body.innerHTML = `
-      <div class="learn-summary-icon">&#9733;</div>
       <div class="learn-summary-text">
         You've reviewed all your mistakes!
       </div>
@@ -430,12 +429,6 @@ export class LearnPanel {
       .learn-finished {
         text-align: center;
         padding: 20px 14px;
-      }
-
-      .learn-summary-icon {
-        font-size: 40px;
-        color: #f0c040;
-        margin-bottom: 8px;
       }
 
       .learn-summary-text {

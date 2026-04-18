@@ -591,18 +591,18 @@ export class SillyChessApp {
     switch (status) {
       case 'checkmate':
         if (playerWon) {
-          return '🏆 You won by checkmate! Use ← → to review.';
+          return 'You won by checkmate! Use the arrow keys to review.';
         } else {
-          return '💀 You lost by checkmate. Use ← → to review.';
+          return 'You lost by checkmate. Use the arrow keys to review.';
         }
       case 'stalemate':
-        return '🤝 Draw by stalemate. Use ← → to review.';
+        return 'Draw by stalemate. Use the arrow keys to review.';
       case 'draw':
-        return '🤝 Game drawn. Use ← → to review.';
+        return 'Game drawn. Use the arrow keys to review.';
       case 'resigned':
-        return '🏳️ Game ended by resignation. Use ← → to review.';
+        return 'Game ended by resignation. Use the arrow keys to review.';
       default:
-        return 'Game over. Use ← → to review.';
+        return 'Game over. Use the arrow keys to review.';
     }
   }
 
@@ -837,7 +837,7 @@ export class SillyChessApp {
 
     // Don't allow moves when viewing history
     if (this.state.viewingHistoryIndex !== -1) {
-      this.setStatus('Return to current position to make a move (→ key)');
+      this.setStatus('Return to current position to make a move (forward arrow key)');
       return;
     }
 
@@ -1233,7 +1233,7 @@ export class SillyChessApp {
     let outcome: 'win' | 'loss' | 'draw';
     let headline: string;
     let subtitle: string;
-    const statusText = 'Use ← → to review the game.';
+    const statusText = 'Use the arrow keys to review the game.';
 
     switch (status) {
       case 'checkmate': {
@@ -1409,7 +1409,6 @@ export class SillyChessApp {
       <div class="postgame-overlay"></div>
       <div class="postgame-content">
         <div class="postgame-header postgame-${outcome}">
-          <span class="postgame-icon">${outcome === 'win' ? '🏆' : outcome === 'loss' ? '💀' : '🤝'}</span>
           <h2 class="postgame-headline">${headline}</h2>
           <p class="postgame-subtitle">${subtitle}</p>
         </div>
@@ -1469,8 +1468,8 @@ export class SillyChessApp {
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.6);
-        backdrop-filter: blur(2px);
+        background: var(--overlay, rgba(0, 0, 0, 0.55));
+        backdrop-filter: blur(4px);
       }
 
       .postgame-content {
@@ -1478,12 +1477,14 @@ export class SillyChessApp {
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background: #16213e;
-        border-radius: 12px;
+        background: var(--panel);
+        color: var(--fg);
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
         overflow: hidden;
         min-width: 340px;
         max-width: 420px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.35);
         animation: postgame-pop 0.25s ease-out;
       }
 
@@ -1493,80 +1494,59 @@ export class SillyChessApp {
       }
 
       .postgame-header {
-        padding: 28px 32px 20px;
+        padding: 24px 28px 18px;
         text-align: center;
-      }
-
-      .postgame-win { background: linear-gradient(135deg, #2d5a27, #1a3a15); }
-      .postgame-loss { background: linear-gradient(135deg, #5a2727, #3a1515); }
-      .postgame-draw { background: linear-gradient(135deg, #4a4e69, #33364d); }
-
-      .postgame-icon {
-        font-size: 48px;
-        display: block;
-        margin-bottom: 8px;
+        border-bottom: 1px solid var(--panel-border);
       }
 
       .postgame-headline {
         margin: 0;
         font-size: 22px;
         font-weight: 700;
-        color: #fff;
+        color: var(--fg);
       }
 
       .postgame-subtitle {
         margin: 6px 0 0;
         font-size: 14px;
-        color: rgba(255, 255, 255, 0.7);
+        color: var(--fg-muted);
       }
 
       .postgame-actions {
         display: flex;
-        gap: 12px;
-        padding: 20px 32px 24px;
+        gap: 10px;
+        padding: 18px 24px 22px;
         justify-content: center;
       }
 
       .postgame-btn {
         flex: 1;
-        padding: 12px 20px;
-        border: none;
+        padding: 10px 16px;
+        border: 1px solid var(--btn-border);
         border-radius: 8px;
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.15s ease;
+        background: var(--btn);
+        color: var(--fg);
+        font-family: inherit;
       }
 
       .postgame-btn:hover {
-        transform: translateY(-2px);
-      }
-
-      .postgame-btn-review {
-        background: #4a4e69;
-        color: #eee;
-      }
-
-      .postgame-btn-review:hover {
-        background: #5c6078;
-      }
-
-      .postgame-btn-learn {
-        background: #7c5cbf;
-        color: #fff;
-      }
-
-      .postgame-btn-learn:hover {
-        background: #9370db;
+        background: var(--btn-hover);
+        transform: translateY(-1px);
       }
 
       .postgame-btn-new {
-        background: #829769;
-        color: #fff;
+        background: var(--accent);
+        color: var(--accent-contrast);
+        border-color: var(--accent);
       }
 
       .postgame-btn-new:hover {
-        background: #93a87a;
+        background: var(--accent);
+        filter: brightness(1.05);
       }
 
       @media (max-width: 500px) {

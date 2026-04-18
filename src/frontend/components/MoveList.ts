@@ -65,10 +65,10 @@ export class MoveList {
       <div class="move-list-header">Moves</div>
       <div class="move-list-content"></div>
       <div class="move-nav-bar">
-        <button class="nav-btn nav-first" title="First (↑)">⏮</button>
-        <button class="nav-btn nav-back" title="Back (←)">◀</button>
-        <button class="nav-btn nav-forward" title="Forward (→)">▶</button>
-        <button class="nav-btn nav-last" title="Current (↓)">⏭</button>
+        <button class="nav-btn nav-first" title="First (Up arrow)" aria-label="First move">&lt;&lt;</button>
+        <button class="nav-btn nav-back" title="Back (Left arrow)" aria-label="Previous move">&lt;</button>
+        <button class="nav-btn nav-forward" title="Forward (Right arrow)" aria-label="Next move">&gt;</button>
+        <button class="nav-btn nav-last" title="Current (Down arrow)" aria-label="Last move">&gt;&gt;</button>
       </div>
     `;
 
