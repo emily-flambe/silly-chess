@@ -91,6 +91,13 @@ src/
   types/             # TypeScript type definitions
 ```
 
+## Acknowledgements
+
+- Chess piece SVGs are the "Cburnett" set by Colin M.L. Burnett, sourced from
+  [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:PNG_chess_pieces/Standard_transparent)
+  and licensed under [CC-BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
+  See [`src/frontend/pieces/ATTRIBUTION.md`](src/frontend/pieces/ATTRIBUTION.md) for details.
+
 ## License
 
 MIT

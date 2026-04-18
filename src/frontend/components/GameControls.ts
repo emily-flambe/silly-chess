@@ -272,9 +272,10 @@ export class GameControls {
     const style = document.createElement('style');
     style.textContent = `
       .game-controls {
-        background: #16213e;
+        background: var(--panel);
         padding: 20px;
-        border-radius: 8px;
+        border-radius: var(--radius, 10px);
+        border: 1px solid var(--panel-border);
       }
 
       .control-buttons {
@@ -285,10 +286,10 @@ export class GameControls {
 
       .control-btn {
         padding: 12px 16px;
-        background: #4a4e69;
-        color: #eee;
-        border: none;
-        border-radius: 6px;
+        background: var(--btn);
+        color: var(--fg);
+        border: 1px solid var(--btn-border);
+        border-radius: 8px;
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
@@ -300,9 +301,9 @@ export class GameControls {
       }
 
       .control-btn:hover:not(:disabled) {
-        background: #5c6078;
+        background: var(--btn-hover);
         transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 8px var(--shadow, rgba(0, 0, 0, 0.15));
       }
 
       .control-btn:active:not(:disabled) {
@@ -319,12 +320,14 @@ export class GameControls {
       }
 
       .new-game-btn {
-        background: #829769;
-        color: #1a1a2e;
+        background: var(--accent);
+        color: var(--accent-contrast);
+        border-color: var(--accent);
       }
 
       .new-game-btn:hover:not(:disabled) {
-        background: #94a877;
+        background: var(--accent-hover, var(--accent));
+        filter: brightness(1.05);
       }
 
       /* Modal Styles */
@@ -343,7 +346,7 @@ export class GameControls {
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.7);
+        background: var(--overlay, rgba(0, 0, 0, 0.55));
         backdrop-filter: blur(4px);
       }
 
@@ -352,25 +355,27 @@ export class GameControls {
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background: #16213e;
+        background: var(--panel);
+        color: var(--fg);
+        border: 1px solid var(--panel-border);
         border-radius: 12px;
         padding: 32px;
         min-width: 400px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 8px 32px var(--shadow, rgba(0, 0, 0, 0.25));
       }
 
       .modal-title {
         margin: 0 0 8px 0;
         font-size: 24px;
         font-weight: 700;
-        color: #eee;
+        color: var(--fg);
         text-align: center;
       }
 
       .modal-subtitle {
         margin: 0 0 24px 0;
         font-size: 14px;
-        color: #9a9eb1;
+        color: var(--fg-muted);
         text-align: center;
       }
 
@@ -383,9 +388,9 @@ export class GameControls {
 
       .color-btn {
         padding: 24px 16px;
-        background: #4a4e69;
-        color: #eee;
-        border: 2px solid transparent;
+        background: var(--btn);
+        color: var(--fg);
+        border: 2px solid var(--btn-border);
         border-radius: 8px;
         cursor: pointer;
         transition: all 0.2s ease;
@@ -396,8 +401,8 @@ export class GameControls {
       }
 
       .color-btn:hover {
-        background: #5c6078;
-        border-color: #829769;
+        background: var(--btn-hover);
+        border-color: var(--accent);
         transform: translateY(-4px);
       }
 
@@ -439,10 +444,10 @@ export class GameControls {
 
       .modal-btn {
         padding: 10px 24px;
-        background: #4a4e69;
-        color: #eee;
-        border: none;
-        border-radius: 6px;
+        background: var(--btn);
+        color: var(--fg);
+        border: 1px solid var(--btn-border);
+        border-radius: 8px;
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
@@ -450,7 +455,7 @@ export class GameControls {
       }
 
       .modal-btn:hover {
-        background: #5c6078;
+        background: var(--btn-hover);
       }
 
       .mode-selection {
@@ -462,9 +467,9 @@ export class GameControls {
 
       .mode-btn {
         padding: 24px 16px;
-        background: #4a4e69;
-        color: #eee;
-        border: 2px solid transparent;
+        background: var(--btn);
+        color: var(--fg);
+        border: 2px solid var(--btn-border);
         border-radius: 8px;
         cursor: pointer;
         transition: all 0.2s ease;
@@ -477,8 +482,8 @@ export class GameControls {
       }
 
       .mode-btn:hover {
-        background: #5c6078;
-        border-color: #829769;
+        background: var(--btn-hover);
+        border-color: var(--accent);
         transform: translateY(-4px);
       }
 
@@ -493,12 +498,13 @@ export class GameControls {
       }
 
       .next-btn-difficulty {
-        background: #829769;
-        color: #1a1a2e;
+        background: var(--accent);
+        color: var(--accent-contrast);
+        border-color: var(--accent);
       }
 
       .next-btn-difficulty:hover {
-        background: #94a877;
+        filter: brightness(1.05);
       }
 
       .back-btn {
@@ -521,7 +527,7 @@ export class GameControls {
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.7);
+        background: var(--overlay, rgba(0, 0, 0, 0.55));
         backdrop-filter: blur(4px);
       }
 
@@ -530,11 +536,13 @@ export class GameControls {
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background: #1a1a2e;
+        background: var(--panel);
+        color: var(--fg);
+        border: 1px solid var(--panel-border);
         border-radius: 12px;
         min-width: 500px;
         max-width: 600px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 8px 32px var(--shadow, rgba(0, 0, 0, 0.25));
       }
 
       .settings-header {
@@ -542,20 +550,20 @@ export class GameControls {
         justify-content: space-between;
         align-items: center;
         padding: 24px 24px 16px 24px;
-        border-bottom: 1px solid #333;
+        border-bottom: 1px solid var(--panel-border);
       }
 
       .settings-title {
         margin: 0;
         font-size: 24px;
         font-weight: 700;
-        color: #eee;
+        color: var(--fg);
       }
 
       .settings-close {
         background: none;
         border: none;
-        color: #9a9eb1;
+        color: var(--fg-muted);
         font-size: 32px;
         line-height: 1;
         cursor: pointer;
@@ -569,7 +577,7 @@ export class GameControls {
       }
 
       .settings-close:hover {
-        color: #eee;
+        color: var(--fg);
       }
 
       .settings-body {
@@ -578,7 +586,8 @@ export class GameControls {
 
       .setting-item {
         padding: 16px;
-        background: #16213e;
+        background: var(--panel-alt, var(--panel));
+        border: 1px solid var(--panel-border);
         border-radius: 8px;
         margin-bottom: 12px;
       }
@@ -589,7 +598,7 @@ export class GameControls {
         gap: 12px;
         cursor: pointer;
         user-select: none;
-        color: #eee;
+        color: var(--fg);
         font-size: 14px;
         font-weight: 500;
       }
@@ -598,7 +607,7 @@ export class GameControls {
         width: 20px;
         height: 20px;
         cursor: pointer;
-        accent-color: #829769;
+        accent-color: var(--accent);
       }
 
       /* Resign Confirmation */
@@ -608,7 +617,7 @@ export class GameControls {
       }
 
       .resign-confirm-text {
-        color: #eee;
+        color: var(--fg);
         font-size: 15px;
         font-weight: 600;
         margin-bottom: 12px;
@@ -621,16 +630,17 @@ export class GameControls {
       }
 
       .resign-confirm-yes {
-        background: #c0392b !important;
+        background: var(--danger, #c0392b) !important;
         color: #fff !important;
+        border-color: var(--danger, #c0392b) !important;
       }
 
       .resign-confirm-yes:hover:not(:disabled) {
-        background: #e74c3c !important;
+        filter: brightness(1.1);
       }
 
       .resign-confirm-no {
-        background: #4a4e69 !important;
+        background: var(--btn) !important;
       }
     `;
 

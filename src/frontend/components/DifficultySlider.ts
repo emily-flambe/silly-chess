@@ -85,9 +85,10 @@ export class DifficultySlider {
     const style = document.createElement('style');
     style.textContent = `
       .difficulty-slider {
-        background: #16213e;
+        background: var(--panel-alt, var(--panel));
         padding: 20px;
         border-radius: 8px;
+        border: 1px solid var(--panel-border);
         margin-bottom: 16px;
       }
 
@@ -101,7 +102,7 @@ export class DifficultySlider {
       .difficulty-label {
         font-size: 14px;
         font-weight: 600;
-        color: #eee;
+        color: var(--fg);
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
@@ -109,7 +110,7 @@ export class DifficultySlider {
       .difficulty-value {
         font-size: 18px;
         font-weight: 700;
-        color: #829769;
+        color: var(--accent);
         font-variant-numeric: tabular-nums;
       }
 
@@ -122,7 +123,7 @@ export class DifficultySlider {
 
       .slider-label {
         font-size: 12px;
-        color: #9a9eb1;
+        color: var(--fg-muted);
         min-width: 40px;
         text-align: center;
       }
@@ -132,7 +133,7 @@ export class DifficultySlider {
         -webkit-appearance: none;
         appearance: none;
         height: 6px;
-        background: #333;
+        background: var(--slider-track, var(--panel-border));
         border-radius: 3px;
         outline: none;
         cursor: pointer;
@@ -143,7 +144,7 @@ export class DifficultySlider {
         appearance: none;
         width: 20px;
         height: 20px;
-        background: #829769;
+        background: var(--accent);
         border-radius: 50%;
         cursor: pointer;
         transition: transform 0.15s ease;
@@ -156,7 +157,7 @@ export class DifficultySlider {
       .elo-slider::-moz-range-thumb {
         width: 20px;
         height: 20px;
-        background: #829769;
+        background: var(--accent);
         border: none;
         border-radius: 50%;
         cursor: pointer;
@@ -177,10 +178,10 @@ export class DifficultySlider {
         flex: 1;
         min-width: 70px;
         padding: 8px 12px;
-        background: #4a4e69;
-        color: #eee;
-        border: none;
-        border-radius: 4px;
+        background: var(--btn);
+        color: var(--fg);
+        border: 1px solid var(--btn-border);
+        border-radius: 6px;
         font-size: 12px;
         font-weight: 500;
         cursor: pointer;
@@ -188,7 +189,7 @@ export class DifficultySlider {
       }
 
       .preset-button:hover {
-        background: #5c6078;
+        background: var(--btn-hover);
         transform: translateY(-1px);
       }
 
@@ -197,8 +198,9 @@ export class DifficultySlider {
       }
 
       .preset-button.active {
-        background: #829769;
-        color: #1a1a2e;
+        background: var(--accent);
+        color: var(--accent-contrast);
+        border-color: var(--accent);
       }
     `;
 

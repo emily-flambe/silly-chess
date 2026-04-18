@@ -17,14 +17,15 @@ export interface BoardOptions {
 
 type MoveCallback = (from: string, to: string, promotion?: string) => void;
 
-// Use the same filled symbols for both colors - we'll style with CSS
-const PIECE_SYMBOLS: Record<string, string> = {
-  'K': '\u265A', // King (filled)
-  'Q': '\u265B', // Queen (filled)
-  'R': '\u265C', // Rook (filled)
-  'B': '\u265D', // Bishop (filled)
-  'N': '\u265E', // Knight (filled)
-  'P': '\u265F', // Pawn (filled)
+// Piece data-attribute map. Actual images come from styles.css
+// which points each `data-piece` at the corresponding SVG under /pieces/.
+const PIECE_CODE: Record<string, string> = {
+  'K': 'K',
+  'Q': 'Q',
+  'R': 'R',
+  'B': 'B',
+  'N': 'N',
+  'P': 'P',
 };
 
 // Piece info parsed from FEN
@@ -94,6 +95,42 @@ export class ChessBoard {
   }
 
   /**
+   * Refresh in-square coord labels (.coord.file on bottom rank,
+   * .coord.rank on left file). Called on every render so flips update.
+   */
+  private refreshInSquareCoords(): void {
+    if (!this.options.showCoordinates) return;
+    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    const flipped = this.options.flipped;
+    // Clear existing in-square coord overlays
+    this.boardElement.querySelectorAll('.coord').forEach(el => el.remove());
+
+    // File labels go on the bottom-most rank (rank 1 normally, rank 8 when flipped)
+    const bottomRank = flipped ? 8 : 1;
+    for (let f = 0; f < 8; f++) {
+      const sq = files[f] + bottomRank;
+      const el = this.getSquareElement(sq);
+      if (!el) continue;
+      const span = document.createElement('span');
+      span.className = 'coord file';
+      span.textContent = files[f];
+      el.appendChild(span);
+    }
+
+    // Rank labels go on the left-most file (file a normally, file h when flipped)
+    const leftFile = flipped ? 'h' : 'a';
+    for (let r = 1; r <= 8; r++) {
+      const sq = leftFile + r;
+      const el = this.getSquareElement(sq);
+      if (!el) continue;
+      const span = document.createElement('span');
+      span.className = 'coord rank';
+      span.textContent = String(r);
+      el.appendChild(span);
+    }
+  }
+
+  /**
    * Create a single square element
    */
   private createSquare(file: number, rank: number): HTMLElement {
@@ -117,31 +154,13 @@ export class ChessBoard {
   }
 
   /**
-   * Add coordinate labels to the board
+   * Add coordinate labels to the board. Coord labels are drawn inside
+   * the bottom-rank squares (files) and left-file squares (ranks) as
+   * overlay spans, per the new design. Actual placement is done by
+   * refreshInSquareCoords() so it re-runs after flips/renders.
    */
-  private addCoordinates(board: HTMLElement): void {
-    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-    const ranks = ['1', '2', '3', '4', '5', '6', '7', '8'];
-
-    // Add file labels (a-h) at bottom
-    files.forEach((file, index) => {
-      const label = document.createElement('div');
-      label.className = 'coordinate file-coord';
-      label.textContent = file;
-      label.style.gridColumn = String(index + 1);
-      label.style.gridRow = '9';
-      board.appendChild(label);
-    });
-
-    // Add rank labels (1-8) on right side
-    ranks.forEach((rank, index) => {
-      const label = document.createElement('div');
-      label.className = 'coordinate rank-coord';
-      label.textContent = rank;
-      label.style.gridColumn = '9';
-      label.style.gridRow = String(8 - index);
-      board.appendChild(label);
-    });
+  private addCoordinates(_board: HTMLElement): void {
+    // no-op; populated by refreshInSquareCoords() during render()
   }
 
   /**
@@ -283,16 +302,18 @@ export class ChessBoard {
     picker.className = 'promotion-picker';
 
     const pieces = [
-      { key: 'q', symbol: PIECE_SYMBOLS['Q'] },
-      { key: 'r', symbol: PIECE_SYMBOLS['R'] },
-      { key: 'b', symbol: PIECE_SYMBOLS['B'] },
-      { key: 'n', symbol: PIECE_SYMBOLS['N'] },
+      { key: 'q', code: 'Q' },
+      { key: 'r', code: 'R' },
+      { key: 'b', code: 'B' },
+      { key: 'n', code: 'N' },
     ];
+    const prefix = color === 'white' ? 'w' : 'b';
 
     for (const p of pieces) {
       const btn = document.createElement('button');
-      btn.className = `promotion-piece piece-${color}`;
-      btn.textContent = p.symbol;
+      btn.className = `promotion-piece piece piece-${color}`;
+      btn.dataset.piece = `${prefix}${p.code}`;
+      btn.setAttribute('aria-label', `Promote to ${color} ${p.code}`);
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.removePromotionPicker();
@@ -351,14 +372,22 @@ export class ChessBoard {
     // Clear all pieces and highlights
     this.clearBoard();
 
-    // Place pieces
+    // Refresh in-square coord overlays (respects flipped state)
+    this.refreshInSquareCoords();
+
+    // Place pieces as DOM elements with a data-piece attribute; the
+    // corresponding SVG is loaded by CSS background-image.
     this.fenPieces.forEach((pieceInfo, square) => {
       const squareElement = this.getSquareElement(square);
       if (squareElement) {
         const pieceElement = document.createElement('div');
         pieceElement.className = `piece piece-${pieceInfo.color}`;
-        const pieceKey = pieceInfo.piece.toUpperCase();
-        pieceElement.textContent = PIECE_SYMBOLS[pieceKey] || pieceInfo.piece;
+        const prefix = pieceInfo.color === 'white' ? 'w' : 'b';
+        const code = PIECE_CODE[pieceInfo.piece.toUpperCase()] || pieceInfo.piece.toUpperCase();
+        pieceElement.dataset.piece = `${prefix}${code}`;
+        // Accessibility: expose the piece type in the DOM for screen readers
+        pieceElement.setAttribute('role', 'img');
+        pieceElement.setAttribute('aria-label', `${pieceInfo.color} ${code}`);
         squareElement.appendChild(pieceElement);
       }
     });
@@ -400,16 +429,16 @@ export class ChessBoard {
   }
 
   /**
-   * Clear all pieces from the board
+   * Clear all pieces (and coord overlays) from the board
    */
   private clearBoard(): void {
     const squares = this.boardElement.querySelectorAll('.square');
     squares.forEach(square => {
       square.classList.remove('selected', 'legal-move', 'legal-capture', 'last-move', 'in-check', 'best-move-from', 'best-move-to');
       const piece = square.querySelector('.piece');
-      if (piece) {
-        piece.remove();
-      }
+      if (piece) piece.remove();
+      const coords = square.querySelectorAll('.coord');
+      coords.forEach(c => c.remove());
     });
   }
 
@@ -542,14 +571,10 @@ export class ChessBoard {
     if (this.options.showCoordinates === show) return;
     this.options.showCoordinates = show;
 
-    // Remove existing coordinate labels
-    this.boardElement.querySelectorAll('.coordinate').forEach(el => el.remove());
-    this.boardElement.classList.remove('with-coords');
-
-    if (show) {
-      this.boardElement.classList.add('with-coords');
-      this.addCoordinates(this.boardElement);
-    }
+    this.boardElement.classList.toggle('with-coords', show);
+    // Remove any in-square coord overlays; render() will re-populate.
+    this.boardElement.querySelectorAll('.coord').forEach(el => el.remove());
+    this.render();
   }
 
   /**
