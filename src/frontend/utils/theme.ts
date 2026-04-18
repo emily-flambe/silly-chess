@@ -61,10 +61,22 @@ export class ThemeManager {
   }
 
   private applyTheme(theme: Theme): void {
-    for (const t of THEMES) {
-      this.root.classList.remove(`theme-${t}`);
+    // Apply the theme class to both the app root and <html>.
+    //
+    // The <html> class is what makes the theme's CSS custom properties
+    // (--panel, --fg, --overlay, etc.) reachable by elements that live
+    // *outside* #app-root — specifically the start/settings modals and
+    // pawn-promotion dialog, which are appended to document.body by
+    // their owning components. Without this, var(--panel) fails to
+    // resolve on those modals and the `background` falls back to its
+    // initial value (transparent), making the dialog hard to read.
+    const targets: Element[] = [document.documentElement, this.root];
+    for (const target of targets) {
+      for (const t of THEMES) {
+        target.classList.remove(`theme-${t}`);
+      }
+      target.classList.add(`theme-${theme}`);
     }
-    this.root.classList.add(`theme-${theme}`);
   }
 
   private wireTopbarToggle(): void {
