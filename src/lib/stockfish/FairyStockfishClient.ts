@@ -275,6 +275,32 @@ export class FairyStockfishClient {
   }
 
   /**
+   * Run `fn` with UCI_LimitStrength temporarily disabled, then restore the
+   * prior strength setting. Position analysis (WDL, centipawn scores) must
+   * always use the full-strength engine — UCI_LimitStrength distorts both
+   * the search and the WDL model, which otherwise produces e.g. 11% win for
+   * the starting position at 1500 Elo.
+   */
+  private async withFullStrength<T>(fn: () => Promise<T>): Promise<T> {
+    const wasLimited = this.currentElo < 3000;
+    if (wasLimited) {
+      this.sendCommand('setoption name UCI_LimitStrength value false');
+      this.sendCommand('isready');
+      await this.waitForReady();
+    }
+    try {
+      return await fn();
+    } finally {
+      if (wasLimited) {
+        this.sendCommand('setoption name UCI_LimitStrength value true');
+        this.sendCommand(`setoption name UCI_Elo value ${this.currentElo}`);
+        this.sendCommand('isready');
+        await this.waitForReady();
+      }
+    }
+  }
+
+  /**
    * Analyze position and return evaluation
    */
   async analyze(
@@ -289,7 +315,20 @@ export class FairyStockfishClient {
     wdl?: { win: number; draw: number; loss: number };
   }> {
     const depth = options?.depth ?? 12;
+    return this.withFullStrength(() => this.runAnalyze(fen, depth));
+  }
 
+  private runAnalyze(
+    fen: string,
+    depth: number
+  ): Promise<{
+    bestMove: string;
+    evaluation: number | string;
+    depth: number;
+    winChance: number;
+    pv?: string[];
+    wdl?: { win: number; draw: number; loss: number };
+  }> {
     return new Promise((resolve, reject) => {
       if (!this.worker) {
         reject(new Error('Worker not initialized'));
@@ -400,7 +439,19 @@ export class FairyStockfishClient {
   }>> {
     const depth = options?.depth ?? 12;
     const lines = options?.lines ?? 3;
+    return this.withFullStrength(() => this.runAnalyzeMultiPV(fen, depth, lines));
+  }
 
+  private runAnalyzeMultiPV(
+    fen: string,
+    depth: number,
+    lines: number
+  ): Promise<Array<{
+    rank: number;
+    evaluation: number | string;
+    pv: string[];
+    wdl?: { win: number; draw: number; loss: number };
+  }>> {
     return new Promise((resolve, reject) => {
       if (!this.worker) {
         reject(new Error('Worker not initialized'));

@@ -5,6 +5,8 @@
  * White advantage shown from top, black advantage from bottom.
  */
 
+import { wdlToWhiteExpectedScore } from '../utils/evalPerspective';
+
 export class EvalBar {
   private container: HTMLElement;
   private barElement: HTMLElement;
@@ -169,17 +171,22 @@ export class EvalBar {
   }
 
   /**
-   * Set evaluation using WDL (Win/Draw/Loss) percentages
-   * When available, shows win% instead of centipawns and uses it for bar fill
+   * Set evaluation using WDL (Win/Draw/Loss) percentages.
+   *
+   * The bar renders an "expected score" (win + draw/2), which is the
+   * conventional chess engine eval measure — equal positions map to 50%,
+   * not to whatever raw win probability the engine estimates. Using raw
+   * `win` instead made drawish positions like the starting position look
+   * lopsided (e.g., showing ~11% white when win/draw/loss was 11/78/11).
+   *
+   * Values must already be in white's perspective (see toWhitePerspective).
    */
-  public setWDL(win: number, draw: number, loss: number): void {
-    // win/draw/loss are percentages 0-100
-    // Bar fill = win% (white winning probability)
-    const whitePercent = Math.max(2, Math.min(98, win));
+  public setWDL(win: number, draw: number, _loss: number): void {
+    const whiteScore = wdlToWhiteExpectedScore(win, draw);
+    const whitePercent = Math.max(2, Math.min(98, whiteScore));
     this.updateBarHeights(whitePercent);
 
-    // Display win% as the text
-    this.evalText.textContent = `${Math.round(win)}%`;
+    this.evalText.textContent = `${Math.round(whiteScore)}%`;
 
     // Pick text color based on which section is behind the midpoint
     this.evalText.style.color = whitePercent > 50 ? '#333' : '#fff';

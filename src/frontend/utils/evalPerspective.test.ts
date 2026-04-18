@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toWhitePerspective } from './evalPerspective';
+import { toWhitePerspective, wdlToWhiteExpectedScore } from './evalPerspective';
 
 // Standard FENs for testing
 const WHITE_TO_MOVE = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -128,5 +128,46 @@ describe('toWhitePerspective', () => {
       const result = toWhitePerspective({ evaluation: 0, wdl }, WHITE_TO_MOVE);
       expect(result).toEqual({ type: 'wdl', win: 0, draw: 0, loss: 0 });
     });
+  });
+});
+
+describe('wdlToWhiteExpectedScore', () => {
+  it('returns 50 for symmetric drawish WDL (the bug scenario)', () => {
+    // Starting position under strength limiting produced WDL like {11, 78, 11}.
+    // Bar should show ~50, NOT 11.
+    expect(wdlToWhiteExpectedScore(11, 78)).toBe(50);
+  });
+
+  it('returns 50 for perfectly equal WDL with no draws', () => {
+    expect(wdlToWhiteExpectedScore(50, 0)).toBe(50);
+  });
+
+  it('returns 100 when white wins deterministically', () => {
+    expect(wdlToWhiteExpectedScore(100, 0)).toBe(100);
+  });
+
+  it('returns 0 when black wins deterministically', () => {
+    expect(wdlToWhiteExpectedScore(0, 0)).toBe(0);
+  });
+
+  it('returns 50 for a guaranteed draw', () => {
+    expect(wdlToWhiteExpectedScore(0, 100)).toBe(50);
+  });
+
+  it('slight white edge (55/30/15) is slightly above 50', () => {
+    // 55 + 15 = 70
+    expect(wdlToWhiteExpectedScore(55, 30)).toBe(70);
+  });
+
+  it('slight black edge (15/30/55) is slightly below 50', () => {
+    // 15 + 15 = 30
+    expect(wdlToWhiteExpectedScore(15, 30)).toBe(30);
+  });
+
+  it('ignores the loss parameter (only uses win + draw/2)', () => {
+    // Same win+draw, different loss should yield same score.
+    // (This documents the API: loss is redundant given win+draw+loss=100,
+    // and is intentionally not part of the expected-score formula.)
+    expect(wdlToWhiteExpectedScore(40, 40)).toBe(60);
   });
 });

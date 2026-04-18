@@ -54,3 +54,17 @@ export function toWhitePerspective(analysis: StockfishAnalysis, fen: string): Wh
   const evalFromWhitePerspective = isBlackToMove ? -cp : cp;
   return { type: 'centipawns', value: evalFromWhitePerspective || 0 };
 }
+
+/**
+ * Convert a WDL triple to an "expected score" for white (0-100).
+ *
+ * Raw win% excludes draws entirely, so a drawish-but-balanced position
+ * (e.g., win=11, draw=78, loss=11) looks lopsided if rendered as `win`.
+ * The conventional measure — and what public eval bars show — is
+ * `win + draw/2`, which puts equal positions at 50.
+ *
+ * WDL values must already be from white's perspective (see toWhitePerspective).
+ */
+export function wdlToWhiteExpectedScore(win: number, draw: number): number {
+  return win + draw / 2;
+}
