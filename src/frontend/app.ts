@@ -93,6 +93,7 @@ export class SillyChessApp {
     tactics: HTMLElement;
     playerBarTop: HTMLElement;
     playerBarBottom: HTMLElement;
+    explanation: HTMLElement;
     appRoot: HTMLElement;
   };
 
@@ -109,8 +110,9 @@ export class SillyChessApp {
     const tacticsContainer = document.getElementById('tactics-container');
     const playerBarTop = document.getElementById('player-bar-top');
     const playerBarBottom = document.getElementById('player-bar-bottom');
+    const explanationContainer = document.getElementById('explanation-container');
 
-    if (!appRoot || !boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer || !analysisContainer || !tacticsContainer || !playerBarTop || !playerBarBottom) {
+    if (!appRoot || !boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer || !analysisContainer || !tacticsContainer || !playerBarTop || !playerBarBottom || !explanationContainer) {
       throw new Error('Required container elements not found');
     }
 
@@ -125,6 +127,7 @@ export class SillyChessApp {
       tactics: tacticsContainer,
       playerBarTop: playerBarTop,
       playerBarBottom: playerBarBottom,
+      explanation: explanationContainer,
       appRoot: appRoot,
     };
 
@@ -181,10 +184,12 @@ export class SillyChessApp {
     this.learnPanel.onExit(() => this.exitLearnMode());
     this.moveReviewPanel = new MoveReviewPanel(this.containers.analysis.parentElement || this.containers.analysis);
 
-    // Create explanation panel (below the status bar)
-    this.explanationPanel = new ExplanationPanel(this.containers.status.parentElement!);
+    // Create explanation panel beneath the board so the Explain button and the
+    // expanded panel have room to render. (The old status-pill mount clipped
+    // everything inside the topbar chip.)
+    this.explanationPanel = new ExplanationPanel(this.containers.explanation);
     const explainBtn = this.explanationPanel.createButton();
-    this.containers.status.parentElement!.appendChild(explainBtn);
+    this.containers.explanation.appendChild(explainBtn);
     explainBtn.addEventListener('click', () => this.handleExplain());
 
     // Set up event handlers
