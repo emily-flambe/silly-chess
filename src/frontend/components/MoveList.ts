@@ -104,50 +104,52 @@ export class MoveList {
     style.id = styleId;
     style.textContent = `
       .move-list-wrapper {
-        background: #16213e;
-        border-radius: 8px;
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 10px;
         display: flex;
         flex-direction: column;
         height: 100%;
         min-height: 200px;
-        max-height: 560px;
+        overflow: hidden;
       }
 
       .captured-pieces-section {
-        padding: 12px 16px;
-        border-bottom: 1px solid #333;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--panel-border);
       }
 
       .section-header {
-        font-size: 14px;
+        font-size: 11px;
         font-weight: 600;
-        color: #9a9eb1;
+        color: var(--fg-muted);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 8px;
+        letter-spacing: 0.08em;
+        margin-bottom: 6px;
       }
 
       .captured-row {
         display: flex;
         align-items: center;
-        gap: 8px;
-        min-height: 36px;
+        gap: 6px;
+        min-height: 28px;
         margin-bottom: 2px;
       }
 
       .captured-label {
-        font-size: 12px;
-        color: #9a9eb1;
+        font-size: 11px;
+        color: var(--fg-muted);
         font-weight: 600;
-        min-width: 20px;
+        min-width: 18px;
       }
 
       .captured-pieces {
         display: flex;
         flex-wrap: wrap;
         gap: 4px;
-        font-size: 26px;
+        font-size: 22px;
         line-height: 1;
+        color: var(--fg);
       }
 
       .captured-piece {
@@ -155,39 +157,29 @@ export class MoveList {
       }
 
       .captured-piece-white {
-        color: #fff;
-        text-shadow:
-          -1px -1px 0 #000,
-          1px -1px 0 #000,
-          -1px 1px 0 #000,
-          1px 1px 0 #000,
-          0 2px 4px rgba(0, 0, 0, 0.3);
+        color: var(--fg);
       }
 
       .captured-piece-black {
-        color: #1a1a1a;
-        text-shadow:
-          -1px -1px 0 #888,
-          1px -1px 0 #888,
-          -1px 1px 0 #888,
-          1px 1px 0 #888,
-          0 2px 4px rgba(0, 0, 0, 0.3);
+        color: var(--fg);
       }
 
       .move-list-header {
-        padding: 12px 16px;
-        font-size: 14px;
+        padding: 10px 14px;
+        font-size: 11px;
         font-weight: 600;
-        color: #9a9eb1;
-        border-bottom: 1px solid #333;
+        color: var(--fg-muted);
+        border-bottom: 1px solid var(--panel-border);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.08em;
       }
 
       .move-list-content {
         flex: 1;
         overflow-y: auto;
-        padding: 8px;
+        padding: 6px 0;
+        font-variant-numeric: tabular-nums;
+        font-size: 13.5px;
       }
 
       .move-list-content::-webkit-scrollbar {
@@ -195,113 +187,97 @@ export class MoveList {
       }
 
       .move-list-content::-webkit-scrollbar-track {
-        background: #1a1a2e;
-        border-radius: 3px;
+        background: transparent;
       }
 
       .move-list-content::-webkit-scrollbar-thumb {
-        background: #4a4e69;
+        background: var(--panel-border);
         border-radius: 3px;
       }
 
-      .move-list-content::-webkit-scrollbar-thumb:hover {
-        background: #5c6078;
-      }
-
-      .move-row {
-        display: flex;
+      .move-list-content .move-row {
+        display: grid;
+        grid-template-columns: 36px 1fr 1fr;
         align-items: center;
-        padding: 4px 8px;
-        border-radius: 4px;
+        padding: 3px 14px;
+        gap: 6px;
+        border-radius: 0;
       }
 
-      .move-row:hover {
-        background: rgba(255, 255, 255, 0.05);
+      .move-list-content .move-row:nth-child(odd) {
+        background: var(--accent-soft);
+      }
+
+      .move-list-content .move-row:hover {
+        background: var(--accent-soft);
       }
 
       .move-number {
-        color: #7a7e8f;
+        color: var(--fg-muted);
         font-size: 12px;
-        min-width: 28px;
         font-variant-numeric: tabular-nums;
       }
 
       .move-white, .move-black {
-        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
         font-size: 13px;
         padding: 2px 6px;
         border-radius: 3px;
-        min-width: 50px;
+        color: var(--fg);
+        font-weight: 500;
       }
 
       .move-white {
-        color: #fff;
-        margin-right: 8px;
-      }
-
-      .move-black {
-        color: #aaa;
+        margin-right: 0;
       }
 
       .move-white:not(:empty):hover,
       .move-black:not(:empty):hover {
-        background: rgba(130, 151, 105, 0.2);
+        background: var(--accent-soft);
         cursor: pointer;
       }
 
-      .move-latest {
-        background: rgba(130, 151, 105, 0.15);
-      }
-
       .move-viewing {
-        background: rgba(100, 149, 237, 0.3);
-        border-radius: 3px;
-      }
-
-      .move-empty {
-        color: #555;
+        background: var(--accent) !important;
+        color: var(--accent-contrast) !important;
+        font-weight: 700;
       }
 
       .move-list-empty {
-        color: #7a7e8f;
+        color: var(--fg-muted);
         font-size: 13px;
         text-align: center;
-        padding: 24px 16px;
+        padding: 14px;
         font-style: italic;
       }
 
       .move-nav-bar {
         display: flex;
         justify-content: center;
-        gap: 8px;
-        padding: 12px;
-        border-top: 1px solid #333;
-        background: #1a1a2e;
-        border-radius: 0 0 8px 8px;
+        gap: 6px;
+        padding: 10px;
+        border-top: 1px solid var(--panel-border);
+        background: var(--bg-2);
       }
 
       .nav-btn {
-        width: 40px;
-        height: 32px;
-        background: #4a4e69;
-        color: #eee;
-        border: none;
-        border-radius: 4px;
-        font-size: 14px;
+        width: 36px;
+        height: 28px;
+        background: var(--btn);
+        color: var(--fg);
+        border: 1px solid var(--btn-border);
+        border-radius: 6px;
+        font-size: 13px;
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: background 0.1s ease;
         display: flex;
         align-items: center;
         justify-content: center;
+        font-family: inherit;
       }
 
       .nav-btn:hover:not(:disabled) {
-        background: #5c6078;
-        transform: translateY(-1px);
-      }
-
-      .nav-btn:active:not(:disabled) {
-        transform: translateY(0);
+        background: var(--btn-hover);
       }
 
       .nav-btn:disabled {

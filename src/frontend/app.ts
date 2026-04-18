@@ -16,9 +16,11 @@ import { EvalBar } from './components/EvalBar';
 import { MoveList } from './components/MoveList';
 import { AnalysisPanel } from './components/AnalysisPanel';
 import { ExplanationPanel } from './components/ExplanationPanel';
+import { PlayerBar, computeCapturesFromSAN } from './components/PlayerBar';
 import { GameClient, GameState, GameMode, MoveResult, PlayerColor } from './GameClient';
 import { evalToWinPercent, classifyMove, type MoveClassification } from './utils/moveClassification';
 import { toWhitePerspective } from './utils/evalPerspective';
+import { ThemeManager } from './utils/theme';
 import { ChessGrammarClient } from './services/ChessGrammarClient';
 import { TacticsPanel } from './components/TacticsPanel';
 import { LearnPanel, type MistakeEntry } from './components/LearnPanel';
@@ -55,6 +57,9 @@ export class SillyChessApp {
   private tacticsClient!: ChessGrammarClient;
   private learnPanel!: LearnPanel;
   private moveReviewPanel!: MoveReviewPanel;
+  private playerBarTop!: PlayerBar;
+  private playerBarBottom!: PlayerBar;
+  private themeManager!: ThemeManager;
 
   private readonly START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   private evalRequestId = 0;
@@ -86,10 +91,14 @@ export class SillyChessApp {
     moveList: HTMLElement;
     analysis: HTMLElement;
     tactics: HTMLElement;
+    playerBarTop: HTMLElement;
+    playerBarBottom: HTMLElement;
+    appRoot: HTMLElement;
   };
 
   constructor() {
     // Get container elements
+    const appRoot = document.getElementById('app-root');
     const boardContainer = document.getElementById('board-container');
     const controlsContainer = document.getElementById('controls-container');
     const evalBarContainer = document.getElementById('eval-bar-container');
@@ -98,8 +107,10 @@ export class SillyChessApp {
     const moveListContainer = document.getElementById('move-list-container');
     const analysisContainer = document.getElementById('analysis-container');
     const tacticsContainer = document.getElementById('tactics-container');
+    const playerBarTop = document.getElementById('player-bar-top');
+    const playerBarBottom = document.getElementById('player-bar-bottom');
 
-    if (!boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer || !analysisContainer || !tacticsContainer) {
+    if (!appRoot || !boardContainer || !controlsContainer || !evalBarContainer || !statusContainer || !difficultyDisplay || !moveListContainer || !analysisContainer || !tacticsContainer || !playerBarTop || !playerBarBottom) {
       throw new Error('Required container elements not found');
     }
 
@@ -112,6 +123,9 @@ export class SillyChessApp {
       moveList: moveListContainer,
       analysis: analysisContainer,
       tactics: tacticsContainer,
+      playerBarTop: playerBarTop,
+      playerBarBottom: playerBarBottom,
+      appRoot: appRoot,
     };
 
     this.initialize();
@@ -123,12 +137,34 @@ export class SillyChessApp {
   private async initialize(): Promise<void> {
     this.setStatus('Initializing...');
 
+    // Theme manager (applies stored theme to #app-root and wires topbar toggle)
+    this.themeManager = new ThemeManager(this.containers.appRoot);
+
     // Create game client for server communication
     this.gameClient = new GameClient();
     this.setupGameClientHandlers();
 
     // Create UI components (board operates on FEN directly now)
     this.controls = new GameControls(this.containers.controls);
+
+    // Player bars (opponent on top, player on bottom). Both default to white
+    // until we know the assigned color; updatePlayerBars() fills in the truth.
+    this.playerBarTop = new PlayerBar(this.containers.playerBarTop, {
+      color: 'black',
+      name: 'Opponent',
+      clockMs: null,
+      activeClock: false,
+      captured: [],
+      score: 0,
+    });
+    this.playerBarBottom = new PlayerBar(this.containers.playerBarBottom, {
+      color: 'white',
+      name: 'You',
+      clockMs: null,
+      activeClock: false,
+      captured: [],
+      score: 0,
+    });
 
     this.board = new ChessBoard(this.containers.board, {
       interactive: true,
@@ -253,6 +289,7 @@ export class SillyChessApp {
 
     // Update move list
     this.moveList.updateFromSAN(this.state.sanMoves);
+    this.updatePlayerBars();
 
     // Handle game end
     if (gameState.status !== 'active') {
@@ -519,6 +556,7 @@ export class SillyChessApp {
 
     // Update move list
     this.moveList.updateFromSAN(this.state.sanMoves);
+    this.updatePlayerBars();
 
     // Controls should show game as inactive
     this.controls.setGameActive(false);
@@ -709,6 +747,7 @@ export class SillyChessApp {
     this.board.clearHint();
     this.board.clearLastMove();
     this.moveList.clear();
+    this.updatePlayerBars();
     this.evalBar.reset();
     this.analysisPanel.clear();
     this.postGameAnalysisRunning = false;
@@ -826,6 +865,7 @@ export class SillyChessApp {
       if (result.san) {
         this.state.sanMoves.push(result.san);
         this.moveList.updateFromSAN(this.state.sanMoves);
+    this.updatePlayerBars();
       }
 
       // Update board
@@ -912,6 +952,7 @@ export class SillyChessApp {
         if (result.san) {
           this.state.sanMoves.push(result.san);
           this.moveList.updateFromSAN(this.state.sanMoves);
+    this.updatePlayerBars();
         }
 
         // Only update other state if event handler hasn't already (avoid duplicates)
@@ -1795,6 +1836,50 @@ export class SillyChessApp {
    */
   private setStatus(message: string): void {
     this.containers.status.textContent = message;
+  }
+
+  /**
+   * Recompute captured pieces from the current SAN history and push the
+   * totals into the top/bottom player bars. Top bar = opponent, bottom =
+   * player; which physical side is "top" depends on the board orientation.
+   */
+  private updatePlayerBars(): void {
+    const caps = computeCapturesFromSAN(this.state.sanMoves);
+    const playerIsWhite = this.state.playerColor === 'white';
+
+    // Player color controls which side goes on the bottom — the player is
+    // always on the bottom since the board flips to match their color.
+    const bottomColor = playerIsWhite ? 'white' : 'black';
+    const topColor = playerIsWhite ? 'black' : 'white';
+
+    const bottomCaptured = playerIsWhite ? caps.byWhite : caps.byBlack;
+    const bottomScore = playerIsWhite ? caps.scoreWhite : caps.scoreBlack;
+    const topCaptured = playerIsWhite ? caps.byBlack : caps.byWhite;
+    const topScore = playerIsWhite ? caps.scoreBlack : caps.scoreWhite;
+
+    // Mark whichever clock belongs to the side to move as "active"
+    const whiteToMove = this.state.turn === 'w';
+    const playerActive = (playerIsWhite && whiteToMove) || (!playerIsWhite && !whiteToMove);
+
+    const opponentName = this.state.gameMode === 'vs-player' ? 'Opponent' : 'CPU';
+
+    this.playerBarBottom.update({
+      color: bottomColor,
+      name: 'You',
+      captured: bottomCaptured,
+      score: bottomScore,
+      clockMs: null,
+      activeClock: this.state.isGameActive && playerActive,
+    });
+
+    this.playerBarTop.update({
+      color: topColor,
+      name: opponentName,
+      captured: topCaptured,
+      score: topScore,
+      clockMs: null,
+      activeClock: this.state.isGameActive && !playerActive,
+    });
   }
 
   /**
