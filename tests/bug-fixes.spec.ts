@@ -109,23 +109,25 @@ test.describe('Bug Fixes', () => {
     // Get the eval text
     const evalText = await page.locator('#eval-bar-container').textContent();
 
-    // Eval bar may show WDL win% (e.g., "52%") or centipawns (e.g., "+0.2")
-    // With strength limiting enabled, WDL can be skewed at the starting position.
-    // Accept any numeric display as long as it's not an error state.
+    // Eval bar may show WDL expected score (e.g., "50%") or centipawns
+    // (e.g., "+0.2"). Analysis always runs at full strength regardless of
+    // AI difficulty, and the bar renders win+draw/2 rather than raw win%,
+    // so the starting position should be close to 50 — any large deviation
+    // indicates the strength-limit bug has regressed.
     const wdlMatch = evalText?.match(/(\d+)%/);
     const cpMatch = evalText?.match(/([+-]?\d+\.\d+)/);
     expect(wdlMatch || cpMatch).toBeTruthy();
 
     if (wdlMatch) {
-      const winPercent = parseInt(wdlMatch[1], 10);
-      // WDL values can vary widely with UCI_LimitStrength; just verify it's a valid percentage
-      expect(winPercent).toBeGreaterThanOrEqual(0);
-      expect(winPercent).toBeLessThanOrEqual(100);
+      const score = parseInt(wdlMatch[1], 10);
+      // Starting position is theoretically equal; allow a generous window
+      // since engine depth is limited but the value must not be wildly off.
+      expect(score).toBeGreaterThanOrEqual(35);
+      expect(score).toBeLessThanOrEqual(65);
     } else {
-      // Centipawn evaluation: at the starting position should be roughly equal
       const evalValue = parseFloat(cpMatch![1]);
-      expect(evalValue).toBeGreaterThanOrEqual(-3.0);
-      expect(evalValue).toBeLessThanOrEqual(3.0);
+      expect(evalValue).toBeGreaterThanOrEqual(-1.0);
+      expect(evalValue).toBeLessThanOrEqual(1.0);
     }
   });
 
